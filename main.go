@@ -65,14 +65,11 @@ func main() {
 
 func startApp(configFile string) {
 
-	// Config dosyasını absolute path’e çevir
 	absConfigPath, err := filepath.Abs(configFile)
 	if err != nil {
 		fmt.Printf("[ERROR] Failed to resolve config path: %v\n", err)
 		os.Exit(1)
 	}
-
-	// configDir := filepath.Dir(absConfigPath)
 
 	app, cfg := mustLoadAndStart(absConfigPath)
 

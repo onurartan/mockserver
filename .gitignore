@@ -1,6 +1,6 @@
 .qodo
-./schema/mockserver.schema_old.json
-./.docs/gitbash.md
+schema/mockserver.schema_old.json
+.docs/gitbash.md
 
 # Node
 node_modules/
