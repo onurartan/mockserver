@@ -1,0 +1,378 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opensource.trymagic.xyz/schemas/mockserver.schema.json",
+  "title": "MockServer Configuration Schema",
+  "description": "JSON Schema definition for mockserver.json configuration files used by the MockServer project. Supports IDE autocompletion and validation when referenced via $schema.",
+  "type": "object",
+  "required": ["server", "routes"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Reference to the JSON Schema file (used by IDEs for autocomplete and validation)."
+    },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Global server settings and defaults applied to all routes unless overridden.",
+      "properties": {
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 3000,
+          "description": "TCP port on which the MockServer will listen."
+        },
+        "api_prefix": {
+          "type": "string",
+          "pattern": "^/.*",
+          "default": "/v1",
+          "description": "Path prefix automatically prepended to all routes (must start with a '/')."
+        },
+        "default_headers": {
+          "type": "object",
+          "description": "Headers added to every response unless explicitly overridden at route level.",
+          "patternProperties": {
+            "^[A-Za-z0-9-]+$": { "type": "string" }
+          },
+          "additionalProperties": false,
+          "default": { "Content-Type": "application/json" }
+        },
+        "default_delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Default artificial delay (in milliseconds) applied before sending the response."
+        },
+        "swagger_ui_path": {
+          "type": "string",
+          "pattern": "^/.*",
+          "default": "/docs",
+          "description": "Used to specify which route the swagger-ui docs will run on."
+        },
+        "cors": {
+          "type": "object",
+          "description": "CORS (Cross-Origin Resource Sharing) settings for the server.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable or disable the CORS middleware."
+            },
+            "allow_origins": {
+              "type": "array",
+              "items": { "type": "string" },
+              "default": ["*"],
+              "description": "List of allowed origins. Use [\"*\"] to allow all origins."
+            },
+            "allow_methods": {
+              "type": "array",
+              "items": { "type": "string" },
+              "default": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+              "description": "List of allowed HTTP methods."
+            },
+            "allow_headers": {
+              "type": "array",
+              "items": { "type": "string" },
+              "default": ["*"],
+              "description": "List of allowed HTTP headers."
+            },
+            "allow_credentials": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether to allow credentials (cookies, authorization headers, etc.)."
+            }
+          },
+          "additionalProperties": false
+        },
+        "auth": {
+          "type": "object",
+          "description": "Global authentication settings applied to all routes unless overridden.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Indicates whether authentication is enabled. If false, the route is publicly accessible."
+            },
+            "type": {
+              "type": "string",
+              "enum": ["apiKey", "bearer"],
+              "description": "Specifies the authentication method. 'apiKey' uses a custom key, 'bearer' uses a token"
+            },
+            "in": {
+              "type": "string",
+              "enum": ["header", "query"],
+              "description": "Location where the authentication information is expected. Can be sent via HTTP header or query parameter."
+            },
+            "name": {
+              "type": "string",
+              "description": "The name of the header or query parameter containing the authentication credential. Example: 'Authorization', 'X-API-Key'."
+            },
+            "keys": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "List of valid authentication keys/tokens. Used for both 'apiKey' and 'bearer' types. For bearer tokens, the 'Bearer ' prefix is automatically trimmed."
+            }
+          },
+          "additionalProperties": false,
+          "required": ["enabled", "type", "in", "name"]
+        }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "description": "Optional logical grouping of routes for documentation purposes (mapped to Swagger/OpenAPI tags).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Display name for the group (used as OpenAPI tag)."
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional human-readable description of the group."
+          }
+        }
+      },
+      "uniqueItems": true
+    },
+    "routes": {
+      "type": "array",
+      "description": "List of route definitions. Each route can either return a static mock response or proxy/fetch data from an external API.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "method", "path"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable name for the route (used as OpenAPI summary)."
+          },
+          "tag": {
+            "type": "string",
+            "description": "Optional group name this route belongs to (must match one of the 'groups' names)."
+          },
+          "method": {
+            "type": "string",
+            "description": "HTTP method for this route.",
+            "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^/.*",
+            "description": "Relative route path. Path parameters should be defined as {param}, e.g. /users/{id}."
+          },
+          "status": {
+            "type": "integer",
+            "description": "Optional HTTP status code override for this route."
+          },
+          "headers": {
+            "type": "object",
+            "description": "Optional response headers specific to this route (merged with default_headers).",
+            "patternProperties": {
+              "^[A-Za-z0-9-]+$": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "delay_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Artificial delay (in milliseconds) applied before responding for this specific route."
+          },
+          "path_params": {
+            "type": "object",
+            "description": "Schema definition for path parameters. Keys must match placeholders in the route path.",
+            "patternProperties": {
+              "^[A-Za-z0-9_]+$": { "$ref": "#/definitions/paramDef" }
+            },
+            "additionalProperties": false
+          },
+          "query": {
+            "type": "object",
+            "description": "Schema definition for expected query parameters.",
+            "patternProperties": {
+              "^[A-Za-z0-9_]+$": { "$ref": "#/definitions/paramDef" }
+            },
+            "additionalProperties": false
+          },
+          "request_headers": {
+            "type": "object",
+            "description": "Schema definition for expected request headers.",
+            "patternProperties": {
+              "^[A-Za-z0-9-]+$": { "$ref": "#/definitions/paramDef" }
+            },
+            "additionalProperties": false
+          },
+          "body_schema": {
+            "type": "object",
+            "description": "JSON Schema for validating the request body. If omitted, no validation is performed.",
+            "additionalProperties": true
+          },
+          "body_example": {
+            "description": "Example payload for request body (used in documentation).",
+            "type": ["object", "array", "string", "number", "boolean", "null"]
+          },
+          "auth": {
+            "type": "object",
+            "description": "Route-specific authentication (overrides global server.auth).",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "default": true,
+                "description": "Indicates whether authentication is enabled. If false, the route is publicly accessible."
+              },
+              "type": {
+                "type": "string",
+                "enum": ["apiKey", "bearer"],
+                "description": "Specifies the authentication method. 'apiKey' uses a custom key, 'bearer' uses a token"
+              },
+              "in": {
+                "type": "string",
+                "enum": ["header", "query"],
+                "description": "Location where the authentication information is expected. Can be sent via HTTP header or query parameter."
+              },
+              "name": {
+                "type": "string",
+                "description": "The name of the header or query parameter containing the authentication credential. Example: 'Authorization', 'X-API-Key'."
+              },
+              "keys": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "List of valid authentication keys/tokens. Used for both 'apiKey' and 'bearer' types. For bearer tokens, the 'Bearer ' prefix is automatically trimmed."
+              }
+            },
+            "additionalProperties": false,
+            "required": ["enabled", "type", "in", "name"]
+          },
+          "mock": {
+            "type": "object",
+            "description": "Static mock configuration for returning a predefined response from file.",
+            "additionalProperties": false,
+            "required": ["file"],
+            "properties": {
+              "file": {
+                "type": "string",
+                "description": "Path to the mock response file (absolute or relative to project root)."
+              },
+              "status": {
+                "type": "integer",
+                "description": "Override HTTP status code for this mock response."
+              },
+              "headers": {
+                "type": "object",
+                "description": "Additional headers returned with this mock response.",
+                "patternProperties": {
+                  "^[A-Za-z0-9-]+$": { "type": "string" }
+                },
+                "additionalProperties": false
+              },
+              "delay_ms": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Delay in ms before returning mock response."
+              }
+            }
+          },
+          "fetch": {
+            "type": "object",
+            "description": "External API fetch configuration. Supports path parameter substitution in the URL.",
+            "additionalProperties": false,
+            "required": ["url"],
+            "properties": {
+              "url": {
+                "type": "string",
+                "pattern": "^https?://",
+                "description": "Target URL to fetch from. Path parameters like {id} will be replaced at runtime."
+              },
+              "method": {
+                "type": "string",
+                "enum": [
+                  "GET",
+                  "POST",
+                  "PUT",
+                  "PATCH",
+                  "DELETE",
+                  "HEAD",
+                  "OPTIONS"
+                ],
+                "description": "HTTP method for the target request (defaults to route.method if omitted)."
+              },
+              "headers": {
+                "type": "object",
+                "description": "Static headers to be sent to the target service.",
+                "patternProperties": {
+                  "^[A-Za-z0-9-]+$": { "type": "string" }
+                },
+                "additionalProperties": false
+              },
+              "path_params": {
+                "type": "object",
+                "description": "Dynamic path parameters for substitution in the URL.",
+                "patternProperties": {
+                  "^[A-Za-z0-9_]+$": { "$ref": "#/definitions/paramDef" }
+                },
+                "additionalProperties": false
+              },
+              "query_params": {
+                "type": "object",
+                "description": "Static or dynamic query parameters appended to the target URL.",
+                "patternProperties": {
+                  "^[A-Za-z0-9_]+$": { "$ref": "#/definitions/paramDef" }
+                },
+                "additionalProperties": false
+              },
+              "pass_status": {
+                "type": "boolean",
+                "description": "If true, passes the target service's HTTP status code to the client without overriding."
+              },
+              "delay_ms": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Artificial delay in ms before making the external request."
+              },
+              "timeout_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Request timeout in milliseconds for the external fetch."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "paramDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["string", "integer", "number", "boolean", "array", "object"],
+          "description": "Data type of the parameter (used for validation and documentation)."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional human-readable parameter description."
+        },
+        "required": {
+          "type": "boolean",
+          "default": false,
+          "description": "Indicates whether this parameter is required."
+        },
+        "enum": {
+          "type": "array",
+          "items": { "type": ["string", "number", "boolean"] },
+          "description": "Optional list of allowed values."
+        },
+        "example": {
+          "type": ["string", "number", "boolean", "object", "array", "null"],
+          "description": "Example value for documentation purposes."
+        }
+      }
+    }
+  }
+}

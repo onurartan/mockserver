@@ -1,0 +1,259 @@
+{
+  "$schema": "https://opensource.trymagic.xyz/schemas/mockserver.schema.json",
+  "server": {
+    "port": 5000,
+    "api_prefix": "/v1",
+    "default_headers": {
+      "Content-Type": "application/json"
+    },
+    "default_delay_ms": 0,
+    "cors": {
+      "enabled": true,
+      "allow_origins": ["*"],
+      "allow_methods": ["*"],
+      "allow_headers": ["*"],
+      "allow_credentials": false
+    },
+    "auth": {
+      "enabled": true,
+      "type": "apiKey",
+      "name": "apiKey",
+      "in": "query",
+      "keys": ["secret"]
+    }
+  },
+  "routes": [
+    {
+      "name": "Get All Users",
+      "tag": "Users",
+      "method": "GET",
+      "path": "/users",
+      "auth": {
+        "enabled": true,
+        "type": "apiKey",
+        "name": "apiKey",
+        "in": "query",
+        "keys": ["secret"]
+      },
+      "query": {
+        "limit": {
+          "type": "integer",
+          "description": "Kaç kayıt getirileceği",
+          "required": false
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sıralama (asc, desc)",
+          "required": false
+        }
+      },
+      "fetch": {
+        "url": "https://jsonplaceholder.typicode.com/users",
+        "headers": {
+          "Accept": "application/json"
+        }
+      }
+    },
+    {
+      "name": "Get User By ID",
+      "tag": "Users",
+      "method": "GET",
+      "path": "/users/{id}",
+      "path_params": {
+        "id": {
+          "type": "integer",
+          "description": "Kullanıcı ID",
+          "required": true
+        }
+      },
+      "query": {
+        "includePosts": {
+          "type": "boolean",
+          "description": "Kullanıcının postlarını da getir",
+          "required": false
+        }
+      },
+      "fetch": {
+        "url": "https://jsonplaceholder.typicode.com/users/{id}"
+      }
+    },
+    {
+      "name": "Create User",
+      "tag": "Users",
+      "method": "POST",
+      "path": "/users",
+      "body_schema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "username": { "type": "string" },
+          "email": { "type": "string" }
+        },
+        "required": ["name", "username", "email"]
+      },
+      "body_example": {
+        "name": "John Doe",
+        "username": "johnd",
+        "email": "john@example.com"
+      },
+      "fetch": {
+        "url": "https://jsonplaceholder.typicode.com/users",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "Update User",
+      "tag": "Users",
+      "method": "PUT",
+      "auth": {
+        "enabled": true,
+        "type": "bearer",
+        "name": "Authorization",
+        "in": "header",
+        "keys": ["admin-secret-token", "super-admin-token", "secret"]
+      },
+      "path": "/users/{id}",
+      "path_params": {
+        "id": {
+          "type": "integer",
+          "description": "Güncellenecek kullanıcı ID",
+          "required": true
+        }
+      },
+      "body_schema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "email": { "type": "string" }
+        },
+        "required": ["name"]
+      },
+      "body_example": {
+        "name": "Updated Name",
+        "email": "new@example.com"
+      },
+      "fetch": {
+        "url": "https://jsonplaceholder.typicode.com/users/{id}",
+        "method": "PUT",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "Delete User",
+      "tag": "Users",
+      "method": "DELETE",
+      "path": "/users/{id}",
+      "path_params": {
+        "id": {
+          "type": "integer",
+          "description": "Silinecek kullanıcı ID",
+          "required": true
+        }
+      },
+      "fetch": {
+        "url": "https://jsonplaceholder.typicode.com/users/{id}",
+        "method": "DELETE",
+        "delay_ms": 3400,
+        "timeout_ms": 3000
+      }
+    },
+    {
+      "name": "List Todos (Mock)",
+      "tag": "Todos",
+      "method": "GET",
+      "path": "/todos",
+      "query": {
+        "completed": {
+          "type": "boolean",
+          "description": "Tamamlanma durumuna göre filtrele",
+          "required": false
+        }
+      },
+      "mock": {
+        "file": "mocks/todos.json",
+        "status": 200,
+        "headers": {
+          "X-Source": "MockFile"
+        },
+        "delay_ms": 50
+      }
+    },
+    {
+      "name": "Get Todo By title (Mock)",
+      "tag": "Todos",
+      "method": "GET",
+      "path": "/todos/{title}",
+      "path_params": {
+        "title": {
+          "type": "string",
+          "description": "Todo title",
+          "required": true
+        }
+      },
+      "mock": {
+        "file": "mocks/todos.json"
+      }
+    },
+    {
+      "name": "Search Posts",
+      "tag": "Posts",
+      "method": "GET",
+      "path": "/posts/search",
+      "query": {
+        "q": {
+          "type": "string",
+          "description": "Arama kelimesi",
+          "required": true
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Kaç sonuç getirileceği",
+          "required": false
+        }
+      },
+      "fetch": {
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "headers": {
+          "Accept": "application/json"
+        }
+      }
+    },
+    {
+      "name": "Avatar Image Proxy",
+      "tag": "Avatar",
+      "description": "This route was inspired by the https://github.com/onurartan/goavatar project. You can download it to your device and use it, or install it on your server.",
+      "method": "GET",
+      "path": "/avatar/{username}",
+      "path_params": {
+        "username": {
+          "type": "string",
+          "description": "Kullanıcı adı veya isim",
+          "required": true
+        }
+      },
+      "query": {
+        "initials": {
+          "type": "string",
+          "description": "Baş harfler (örn: OA)",
+          "required": false
+        },
+        "aType": {
+          "type": "string",
+          "description": "Avatar tipi (örn: color)",
+          "required": false
+        }
+      },
+      "fetch": {
+        "url": "https://avatar.example.com/avatar/{username}",
+        "headers": {
+          "Accept": "image/png"
+        }
+      }
+    }
+  ]
+}
