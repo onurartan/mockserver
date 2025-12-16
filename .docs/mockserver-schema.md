@@ -2,7 +2,7 @@
 
 ![MockServer Logo](https://dummyimage.com/600x100/4CAF50/ffffff\&text=MockServer+Schema)
 
-[![Version](https://img.shields.io/badge/version-0.0.1-blue)](https://github.com/onurartan/mockserver)
+[![Version](https://img.shields.io/badge/version-0.0.11-blue)](https://github.com/onurartan/mockserver)
 
 
 ## Table of Contents

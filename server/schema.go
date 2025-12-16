@@ -4,6 +4,7 @@ import "net/url"
 import "regexp"
 
 type MockHandler struct {
+	routeName string
 	filePath string
 	status   int
 	headers  map[string]string
@@ -13,10 +14,13 @@ type MockHandler struct {
 
 
 type FetchHandler struct {
+	routeName string
 	targetURL   *url.URL
 	method      string
 	headers     map[string]string
-	queryParams map[string]string
+	// [DEPRACTED] queryParams map[string]string
+	queryParams map[string]struct{}
+	fetchQueryParams map[string]string
 	passStatus  bool
 	delayMs     int
 	timeoutMs   int

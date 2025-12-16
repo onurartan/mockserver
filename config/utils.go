@@ -47,6 +47,10 @@ func validateAndApplyDefaults(cfg *Config, configFilePath string) error {
 		}
 	}
 
+	if !validPathRegex.MatchString(cfg.Server.Debug.Path) {
+		return fmt.Errorf("invalid debug path '%s': must start with '/' and contain only letters, numbers, '-', '_', '{', '}'", cfg.Server.Debug.Path)
+	}
+
 	// Routes validation
 	for i, route := range cfg.Routes {
 		if err := validateRoute(&route, configFilePath); err != nil {
@@ -115,7 +119,7 @@ func validateMock(mock *MockConfig, routePath string, configFilePath string) err
 		return fmt.Errorf("[Route %s] mock.file must be a .json file, got '%s'", routePath, mock.File)
 	}
 
-	 mockFilePath := msUtils.ResolveMockFilePath(configFilePath, mock.File)
+	mockFilePath := msUtils.ResolveMockFilePath(configFilePath, mock.File)
 
 	if _, err := os.Stat(mockFilePath); err != nil {
 		return fmt.Errorf("[Route %s] mock.file not found: '%s'", routePath, mock.File)

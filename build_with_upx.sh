@@ -1,4 +1,7 @@
 #!/bin/bash
+
+# Using UPX for building can sometimes cause problems and may be flagged as dangerous by some file virus scanning software. Please keep this in mind.
+
 set -euo pipefail
 
 # ----------------------------------------
@@ -20,6 +23,24 @@ NC="\033[0m" # No Color
 mkdir -p "$BIN_DIR"
 
 # ----------------------------------------
+# Compress binary with UPX if available
+# ----------------------------------------
+compress_with_upx() {
+  local FILE=$1
+  if command -v upx >/dev/null 2>&1; then
+    if [[ "$FILE" == *macos* ]]; then
+      echo -e "${YELLOW}Skipping UPX for macOS binary: $FILE${NC}"
+    else
+      echo -e "${BLUE}Compressing $FILE with UPX...${NC}"
+      upx --best --lzma --force "$FILE"
+      echo -e "${GREEN}Compressed: $FILE${NC}"
+    fi
+  else
+    echo -e "${YELLOW}UPX not found. Skipping compression for $FILE${NC}"
+  fi
+}
+
+# ----------------------------------------
 # Function to build for a specific OS/ARCH
 # ----------------------------------------
 build() {
@@ -28,9 +49,12 @@ build() {
   local OUTPUT=$3
 
   echo -e "${BLUE}Building $PROJECT_NAME for $GOOS/$GOARCH...${NC}"
+  # -ldflags "-X main.version=$VERSION"
   env GOOS=$GOOS GOARCH=$GOARCH go build -o "$OUTPUT" "$CMD_DIR"
   chmod +x "$OUTPUT"
   echo -e "${GREEN}Built: $OUTPUT${NC}"
+
+  compress_with_upx "$OUTPUT"
 }
 
 # ----------------------------------------

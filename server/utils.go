@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	
+
 	"regexp"
 	"strings"
 	"time"
@@ -17,6 +17,8 @@ import (
 )
 
 import (
+	msconfig "mockserver/config"
+	msServerHandlers "mockserver/server/handlers"
 	server_utils "mockserver/server/utils"
 )
 
@@ -72,8 +74,9 @@ func parseAndFilterMockData(data []byte, params map[string]string) ([]map[string
 // buildTargetURL builds the final request URL for fetch proxying.
 // - Replaces path parameters in the base URL (e.g. {id} → 123)
 // - Appends/overwrites query parameters
-func buildTargetURL(base *url.URL, pathParams, queryParams map[string]string) string {
+func buildTargetURL(base *url.URL, pathParams, clientQuery map[string]string, acceptedQueryParams map[string]struct{}, fetchQueryParams map[string]string) string {
 	target := *base
+
 	path := target.Path
 	for k, v := range pathParams {
 		path = strings.ReplaceAll(path, fmt.Sprintf("{%s}", k), v)
@@ -81,9 +84,16 @@ func buildTargetURL(base *url.URL, pathParams, queryParams map[string]string) st
 	target.Path = path
 
 	q := target.Query()
-	for k, v := range queryParams {
+	for k, v := range clientQuery {
+		if _, ok := acceptedQueryParams[k]; ok {
+			q.Set(k, v)
+		}
+	}
+
+	for k, v := range fetchQueryParams {
 		q.Set(k, v)
 	}
+
 	target.RawQuery = q.Encode()
 	return target.String()
 }
@@ -155,4 +165,41 @@ func responseError(c *fiber.Ctx, status int, errCode, message string, returnObje
 	}
 
 	return c.Status(status).JSON(apiErr)
+}
+
+// getRoutesStat computes the total number of routes, mock routes, and fetch routes
+// defined in the provided configuration.
+func getRoutesStat(cfg *msconfig.Config) (int, int, int) {
+	routeCount := 0
+	mockCount := 0
+	fetchCount := 0
+
+	for _, route := range cfg.Routes {
+		routeCount++
+
+		if route.Mock != nil {
+			mockCount++
+		}
+		if route.Fetch != nil {
+			fetchCount++
+		}
+	}
+
+	return routeCount, mockCount, fetchCount
+}
+
+// withRouteMeta wraps a Fiber handler, injecting route metadata (type and name)
+// into the request context via c.Locals, so that middlewares or loggers
+// can access route-specific information.
+func withRouteMeta(
+	routeType string,
+	routeName string,
+	handler fiber.Handler,
+) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		c.Locals(msServerHandlers.CtxRouteType, routeType)
+		c.Locals(msServerHandlers.CtxRouteName, routeName)
+		c.Locals(msServerHandlers.CtxRoutePath, strings.Split(c.OriginalURL(), "?")[0]+"")
+		return handler(c)
+	}
 }

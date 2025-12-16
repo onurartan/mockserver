@@ -24,6 +24,7 @@ import (
 import (
 	msconfig "mockserver/config"
 	mslogger "mockserver/logger"
+	msServerHandlers "mockserver/server/handlers"
 	msUtils "mockserver/utils"
 )
 
@@ -83,11 +84,12 @@ func newMockHandler(cfg *msconfig.MockConfig, routeCfg msconfig.RouteConfig, srv
 	}
 
 	return &MockHandler{
-		filePath: mockFilePath,
-		status:   status,
-		headers:  headers,
-		delayMs:  delay,
-		data:     data,
+		routeName: routeCfg.Name,
+		filePath:  mockFilePath,
+		status:    status,
+		headers:   headers,
+		delayMs:   delay,
+		data:      data,
 	}, nil
 }
 
@@ -158,16 +160,23 @@ func newFetchHandler(cfg *msconfig.FetchConfig, routeCfg msconfig.RouteConfig, s
 		return nil, fmt.Errorf("failed to compile path param regex: %w", err)
 	}
 
+	queryParams := make(map[string]struct{})
+	for k := range routeCfg.Query {
+		queryParams[k] = struct{}{}
+	}
+
 	return &FetchHandler{
-		targetURL:   parsedURL,
-		method:      cfg.Method,
-		headers:     cfg.Headers,
-		queryParams: cfg.QueryParams,
-		passStatus:  cfg.PassStatus,
-		delayMs:     delay,
-		timeoutMs:   cfg.TimeoutMs,
-		urlRegex:    urlRegex,
-		basePath:    routeCfg.Path,
+		routeName:        routeCfg.Name,
+		targetURL:        parsedURL,
+		method:           cfg.Method,
+		headers:          cfg.Headers,
+		fetchQueryParams: cfg.QueryParams,
+		queryParams:      queryParams,
+		passStatus:       cfg.PassStatus,
+		delayMs:          delay,
+		timeoutMs:        cfg.TimeoutMs,
+		urlRegex:         urlRegex,
+		basePath:         routeCfg.Path,
 	}, nil
 }
 
@@ -175,6 +184,8 @@ func newFetchHandler(cfg *msconfig.FetchConfig, routeCfg msconfig.RouteConfig, s
 // Handles optional delay, timeout, and response status management.
 // Logs errors and returns appropriate HTTP status codes for failures.
 func (p *FetchHandler) handler(c *fiber.Ctx) error {
+
+	start := time.Now()
 
 	timeout := 10 * time.Second
 	if p.timeoutMs > 0 {
@@ -200,12 +211,12 @@ func (p *FetchHandler) handler(c *fiber.Ctx) error {
 	}
 
 	pathParams := c.AllParams()
-	queryParams := map[string]string{}
+	clientQueryParams := map[string]string{}
 	for k, v := range c.Queries() {
-		queryParams[k] = v
+		clientQueryParams[k] = v
 	}
 
-	targetURL := buildTargetURL(p.targetURL, pathParams, queryParams)
+	targetURL := buildTargetURL(p.targetURL, pathParams, clientQueryParams, p.queryParams, p.fetchQueryParams)
 	mslogger.LogInfo(fmt.Sprintf("Proxying request: %s %s", method, targetURL), 0, 0, 5)
 
 	var body io.Reader
@@ -246,6 +257,10 @@ func (p *FetchHandler) handler(c *fiber.Ctx) error {
 
 	}
 	defer resp.Body.Close()
+
+	c.Locals(msServerHandlers.CtxUpstreamURL, targetURL)
+	c.Locals(msServerHandlers.CtxUpstreamStatus, resp.StatusCode)
+	c.Locals(msServerHandlers.CtxUpstreamTimeMs, time.Since(start).Milliseconds())
 
 	// 304 Not Modified handling
 	if resp.StatusCode == http.StatusNotModified {
@@ -289,13 +304,21 @@ func createRouteHandler(route msconfig.RouteConfig, srvCfg msconfig.ServerConfig
 		if err != nil {
 			return nil, err
 		}
-		baseHandler = mh.handler
+		baseHandler = withRouteMeta(
+			msServerHandlers.RouteTypeMock,
+			mh.routeName,
+			mh.handler,
+		)
 	} else if route.Fetch != nil {
 		fh, err := newFetchHandler(route.Fetch, route, srvCfg)
 		if err != nil {
 			return nil, err
 		}
-		baseHandler = fh.handler
+		baseHandler = withRouteMeta(
+			msServerHandlers.RouteTypeFetch,
+			fh.routeName,
+			fh.handler,
+		)
 	} else {
 		return nil, fmt.Errorf("route definition contains neither 'mock' nor 'fetch'")
 	}

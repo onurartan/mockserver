@@ -1,0 +1,1 @@
+Actually, it's very simple. First, I don't like struggling with tests, and mockserver doesn't need to be tested because most components are tested automatically. Every operation is linked to another, and any minor incompatibility or unnecessary formatting will cause mockserver to throw an error. Tests will be added at later levels.

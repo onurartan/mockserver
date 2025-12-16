@@ -10,6 +10,10 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
+import (
+	appinfo "mockserver/internal/appinfo"
+)
+
 var ansi = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func colorStrip(s string) string {
@@ -27,8 +31,8 @@ func StartupMessage(version string) {
 		"",
 	}
 
-	title := "Mock Server"
-	desc := "High-performance mock API server ready."
+	title := appinfo.Title
+	desc := appinfo.Description
 
 	// Colors
 	borderColor := color.New(color.FgHiBlack, color.Bold)

@@ -18,7 +18,9 @@ import (
 
 import (
 	msconfig "mockserver/config"
+	appinfo "mockserver/internal/appinfo"
 	mslogger "mockserver/logger"
+	msServerHandlers "mockserver/server/handlers"
 	msUtils "mockserver/utils"
 )
 
@@ -40,6 +42,10 @@ func (e *ApiError) Error() string {
 // Routes are registered using `createRouteHandler` and support GET, POST, PUT, PATCH, DELETE.
 // Path parameters in {param} style are converted to Fiber's :param format.
 func StartServer(cfg *msconfig.Config, configFilePath string) *fiber.App {
+
+	// Start the request log aggregator goroutine
+	msServerHandlers.StartLogAggregator()
+
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
 
@@ -81,6 +87,8 @@ func StartServer(cfg *msconfig.Config, configFilePath string) *fiber.App {
 	}))
 	app.Use(recover.New())
 
+	app.Use(msServerHandlers.RequestLoggerMiddleware(cfg.Server.Debug.Path))
+
 	if cfg.Server.CORS.Enabled {
 		app.Use(cors.New(cors.Config{
 			AllowOrigins:     strings.Join(cfg.Server.CORS.AllowOrigins, ","),
@@ -90,6 +98,33 @@ func StartServer(cfg *msconfig.Config, configFilePath string) *fiber.App {
 		}))
 	} else {
 		app.Use(cors.New())
+	}
+
+	if cfg.Server.Debug != nil && cfg.Server.Debug.Enabled {
+
+		debugRequestPath := cfg.Server.Debug.Path + "/requests"
+		debugHealthPath := cfg.Server.Debug.Path + "/health"
+		mslogger.LogRoute("GET", debugRequestPath, "", 0, 0, "[DEBUG_ROUTE_REGISTERED]")
+		mslogger.LogRoute("GET", debugHealthPath, "", 0, 0, "[DEBUG_ROUTE_REGISTERED]")
+
+		app.Get(
+			debugRequestPath,
+			withRouteMeta(
+				msServerHandlers.RouteTypeInternal,
+				"debug_requests",
+				msServerHandlers.DebugRequestsHandler,
+			),
+		)
+
+		routeCount, mockCount, fetchCount := getRoutesStat(cfg)
+		app.Get(
+			debugHealthPath,
+			withRouteMeta(
+				msServerHandlers.RouteTypeInternal,
+				"debug_health",
+				msServerHandlers.HealthHandler(routeCount, mockCount, fetchCount, appinfo.Version),
+			),
+		)
 	}
 
 	app.Use(func(c *fiber.Ctx) error {

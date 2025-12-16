@@ -60,9 +60,16 @@ type AuthConfig struct {
 	Keys []string `json:"keys,omitempty"`
 }
 
+type DebugConfig struct {
+	Enabled bool   `json:"enabled"`
+	Path    string `json:"path"`
+}
+
 type ServerConfig struct {
 	// Port on which the server will run
 	Port int `json:"port"`
+	
+	Debug *DebugConfig `json:"debug,omitempty"`
 
 	// Global prefix for all API routes (e.g., "/v1")
 	APIPrefix string `json:"api_prefix"`
@@ -124,6 +131,8 @@ type RouteConfig struct {
 	// Unique name of the route
 	Name string `json:"name"`
 
+	Description string `json:"description,omitempty"`
+	
 	// Tag used for grouping in Swagger/docs
 	Tag string `json:"tag,omitempty"`
 

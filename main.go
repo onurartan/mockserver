@@ -20,12 +20,11 @@ import (
 import (
 	msconfig "mockserver/config"
 	mslogger "mockserver/logger"
+	appinfo "mockserver/internal/appinfo"
 )
 
-const (
-	// Application version
-	Version = "0.0.1"
 
+const (
 	// Debounce delay for config reload
 	debounceDelay = 500 * time.Millisecond
 )
@@ -33,7 +32,7 @@ const (
 var configFile string
 
 func main() {
-	mslogger.StartupMessage(Version)
+	mslogger.StartupMessage(appinfo.Version)
 	mslogger.LoggerConfig.ShowTimestamp = false
 
 	var rootCmd = &cobra.Command{

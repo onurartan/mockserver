@@ -1,7 +1,7 @@
 # ![MockServer Logo](https://dummyimage.com/600x100/4CAF50/ffffff&text=MockServer)
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/onurartan/mockserver)
-[![Version](https://img.shields.io/badge/version-0.0.1-blue)](https://github.com/onurartan/mockserver)
+[![Version](https://img.shields.io/badge/version-0.0.11-blue)](https://github.com/onurartan/mockserver)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](https://opensource.org/licenses/MIT)
 
 ---

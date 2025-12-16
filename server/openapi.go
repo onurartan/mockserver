@@ -199,9 +199,17 @@ func generateOpenAPISpec(cfg *msconfig.Config) map[string]interface{} {
 		fullPath := cfg.Server.APIPrefix + replacePathParams(route.Path)
 		method := strings.ToLower(route.Method)
 
+		var description string
+
+		if route.Description != "" {
+			description = route.Description
+		} else {
+			description = fmt.Sprintf("Auto-generated route for %s", route.Name)
+		}
+
 		operation := map[string]interface{}{
 			"summary":     route.Name,
-			"description": fmt.Sprintf("Auto-generated route for %s", route.Name),
+			"description": description,
 			"responses":   map[string]interface{}{},
 		}
 
