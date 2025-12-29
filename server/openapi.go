@@ -7,14 +7,13 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-)
 
-import (
 	"github.com/gofiber/fiber/v2"
 )
 
 import (
 	msconfig "mockserver/config"
+	appinfo "mockserver/pkg/appinfo"
 )
 
 var mockCache sync.Map
@@ -107,12 +106,73 @@ func buildRequestBody(route msconfig.RouteConfig) map[string]interface{} {
 func buildResponses(route msconfig.RouteConfig) map[string]interface{} {
 	responses := map[string]interface{}{}
 
+	// CASE responses
+	for _, cs := range route.Cases {
+		statusCode := fmt.Sprintf("%d", cs.Then.Status)
+		responses[statusCode] = map[string]interface{}{
+			"description": fmt.Sprintf("Case response for condition: %s", cs.When),
+			"content": map[string]interface{}{
+				"application/json": map[string]interface{}{
+					"example": cs.Then.Body,
+				},
+			},
+		}
+	}
+
+	// Default response
+	if route.Default != nil {
+		statusCode := fmt.Sprintf("%d", route.Default.Status)
+		responses[statusCode] = map[string]interface{}{
+			"description": "Default response if no case matches",
+			"content": map[string]interface{}{
+				"application/json": map[string]interface{}{
+					"example": route.Default.Body,
+				},
+			},
+		}
+	}
+
+	// STATEFUL RESPONSE HANDLING
+	if route.Stateful != nil {
+		action := route.Stateful.Action
+
+		switch action {
+		case "list":
+			responses["200"] = jsonResponseExample("List items", []interface{}{})
+
+		case "create":
+			responses["201"] = jsonResponseExample("Item created", map[string]interface{}{})
+
+		case "get":
+			responses["200"] = jsonResponseExample("Item found", map[string]interface{}{})
+			responses["404"] = errorResponse("Not found", "Ensure the item exists or create it first")
+
+		case "update":
+			responses["200"] = jsonResponseExample("Item updated", map[string]interface{}{})
+			responses["404"] = errorResponse("Not found", "Ensure the item exists before updating")
+
+		case "delete":
+			responses["200"] = jsonResponseExample("Item deleted", map[string]interface{}{
+				"success": true,
+			})
+			responses["404"] = errorResponse("Not found", "Ensure the item exists before deleting")
+		}
+
+	}
+
 	if route.Mock != nil && route.Mock.File != "" {
 		if example, err := loadMockFile(route.Mock.File); err == nil {
 			responses["200"] = map[string]interface{}{
 				"description": "Successful response",
 				"content": map[string]interface{}{
 					"application/json": map[string]interface{}{"example": example},
+				},
+			}
+		} else if route.Mock.Body != nil {
+			responses["200"] = map[string]interface{}{
+				"description": "Successful response",
+				"content": map[string]interface{}{
+					"application/json": map[string]interface{}{"example": route.Mock.Body},
 				},
 			}
 		} else {
@@ -129,9 +189,34 @@ func buildResponses(route msconfig.RouteConfig) map[string]interface{} {
 	return responses
 }
 
+func jsonResponseExample(desc string, example interface{}) map[string]interface{} {
+	return map[string]interface{}{
+		"description": desc,
+		"content": map[string]interface{}{
+			"application/json": map[string]interface{}{
+				"example": example,
+			},
+		},
+	}
+}
+
+func errorResponse(msg, hint string) map[string]interface{} {
+	return map[string]interface{}{
+		"description": msg,
+		"content": map[string]interface{}{
+			"application/json": map[string]interface{}{
+				"example": map[string]interface{}{
+					"error": msg,
+					"hint":  hint,
+				},
+			},
+		},
+	}
+}
+
 // applyAuthToOperation applies authentication metadata to an OpenAPI operation.
 // Supports API key, bearer token, and basic auth.
-func applyAuthToOperation(op map[string]interface{}, params []map[string]interface{}, auth *msconfig.AuthConfig) {
+func applyAuthToOperation(op map[string]interface{}, params *[]map[string]interface{}, auth *msconfig.AuthConfig) {
 	if auth == nil || !auth.Enabled {
 		return
 	}
@@ -141,7 +226,7 @@ func applyAuthToOperation(op map[string]interface{}, params []map[string]interfa
 	case "apikey":
 		secName = "ApiKeyAuth"
 		if auth.In != "" && auth.Name != "" {
-			params = append(params, map[string]interface{}{
+			*params = append(*params, map[string]interface{}{
 				"name":        auth.Name,
 				"in":          auth.In,
 				"required":    true,
@@ -224,7 +309,7 @@ func generateOpenAPISpec(cfg *msconfig.Config) map[string]interface{} {
 		if auth == nil {
 			auth = cfg.Server.Auth
 		}
-		applyAuthToOperation(operation, parameters, auth)
+		applyAuthToOperation(operation, &parameters, auth)
 
 		if len(parameters) > 0 {
 			operation["parameters"] = parameters
@@ -247,7 +332,7 @@ func generateOpenAPISpec(cfg *msconfig.Config) map[string]interface{} {
 		"openapi": "3.0.0",
 		"info": map[string]interface{}{
 			"title":   "MockServer API",
-			"version": "1.0.0",
+			"version": appinfo.Version,
 		},
 		"paths": paths,
 	}

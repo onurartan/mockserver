@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -13,15 +12,18 @@ import (
 )
 
 
-
-
-// mustLoadAndStart loads config and starts server
-func mustLoadAndStart(configPath string) (*fiber.App, *msconfig.Config) {
+func mustLoadAndStart(configPath string) *Runtime {
 	cfg, err := msconfig.LoadConfig(configPath)
 	if err != nil {
 		fatalExit(fmt.Sprintf("Failed to load config: %v", err))
 	}
-	return msServer.StartServer(cfg, configPath), cfg
+
+	app := msServer.StartServer(cfg, configPath, embedDir)
+
+	return &Runtime{
+		App: app,
+		Cfg: cfg,
+	}
 }
 
 // listenApp starts the Fiber server
@@ -31,27 +33,38 @@ func listenApp(app *fiber.App, addr string) {
 	}
 }
 
-// reloadServer reloads config and restarts server
-func reloadServer(appPtr **fiber.App, cfgPtr **msconfig.Config, configFile string) {
+
+func reloadServer(configFile string, rt *Runtime) {
+	rt.Mu.Lock()
+	defer rt.Mu.Unlock()
+
 	mslogger.LogWarn("Config file changed. Reloading server...")
 
-	_ = (*appPtr).Shutdown()
-	time.Sleep(200 * time.Millisecond) // short wait to release port
-
-	newCfg, err := msconfig.LoadConfig(configFile)
+	cfg, err := msconfig.LoadConfig(configFile)
 	if err != nil {
-		mslogger.LogError(fmt.Sprintf("Failed to reload config: %v", err))
+		mslogger.LogError("Reload failed: " + err.Error())
 		return
 	}
 
-	newApp := msServer.StartServer(newCfg, configFile)
-	newAddr := fmt.Sprintf(":%d", newCfg.Server.Port)
-	go listenApp(newApp, newAddr)
-	mslogger.LogSuccess(fmt.Sprintf("Server reloaded successfully and listening on %s", mslogger.GetServerHost(newAddr)), 1)
+	// close old server
+	if rt.App != nil {
+		_ = rt.App.Shutdown()
+	}
 
-	*appPtr = newApp
-	*cfgPtr = newCfg
+	newApp := msServer.StartServer(cfg, configFile, embedDir)
+	addr := fmt.Sprintf(":%d", cfg.Server.Port)
+
+	go listenApp(newApp, addr)
+
+	rt.App = newApp
+	rt.Cfg = cfg
+
+	mslogger.LogSuccess(
+		fmt.Sprintf("Server reloaded and listening on %s", mslogger.GetServerHost(addr, "")),
+		1,
+	)
 }
+
 
 // fatalExit logs error and exits
 func fatalExit(msg string) {

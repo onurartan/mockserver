@@ -1,7 +1,8 @@
 package main
 
 import (
-	"flag"
+	// "flag"
+	"embed"
 	"fmt"
 	"os"
 	"os/signal"
@@ -9,20 +10,18 @@ import (
 	"sync"
 	"syscall"
 	"time"
-)
 
-import (
-	"github.com/fsnotify/fsnotify"
-	"github.com/gofiber/fiber/v2"
+		"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 )
 
 import (
-	msconfig "mockserver/config"
+	appinfo "mockserver/pkg/appinfo"
 	mslogger "mockserver/logger"
-	appinfo "mockserver/internal/appinfo"
 )
 
+//go:embed www
+var embedDir embed.FS
 
 const (
 	// Debounce delay for config reload
@@ -55,6 +54,7 @@ func main() {
 
 	startCmd.Flags().StringVarP(&configFile, "config", "c", "mockserver.json", "Path to config file")
 	rootCmd.AddCommand(startCmd)
+	rootCmd.AddCommand(convertCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -70,26 +70,19 @@ func startApp(configFile string) {
 		os.Exit(1)
 	}
 
-	app, cfg := mustLoadAndStart(absConfigPath)
+	rt := mustLoadAndStart(absConfigPath)
 
-	addr := fmt.Sprintf(":%d", cfg.Server.Port)
-	go listenApp(app, addr)
+	addr := fmt.Sprintf(":%d", rt.Cfg.Server.Port)
+	go listenApp(rt.App, addr)
 	mslogger.LogServerStart(addr)
+	mslogger.LogSuccess(fmt.Sprintf("Interface: %s", mslogger.GetServerHost(addr, rt.Cfg.Server.Console.Path)), 0)
 
-	watchConfigFile(configFile, &app, &cfg)
+	watchConfigFile(configFile, rt)
 }
 
-func parseFlags() string {
-	configFile := flag.String("config", "mockserver.json", "Path to config file (required)")
-	flag.Parse()
-	if *configFile == "" {
-		fatalExit("Config file parameter is required. Example: mockserver -config=mockserver.json")
-	}
-	return *configFile
-}
 
 // watchConfigFile sets up fsnotify watcher and handles reload
-func watchConfigFile(configFile string, appPtr **fiber.App, cfgPtr **msconfig.Config) {
+func watchConfigFile(configFile string, rt *Runtime) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		fatalExit(fmt.Sprintf("Failed to start config watcher: %v", err))
@@ -115,7 +108,7 @@ func watchConfigFile(configFile string, appPtr **fiber.App, cfgPtr **msconfig.Co
 					reloadTimer.Stop()
 				}
 				reloadTimer = time.AfterFunc(debounceDelay, func() {
-					reloadServer(appPtr, cfgPtr, configFile)
+					reloadServer(configFile, rt)
 				})
 				mu.Unlock()
 			}
@@ -124,14 +117,24 @@ func watchConfigFile(configFile string, appPtr **fiber.App, cfgPtr **msconfig.Co
 			mslogger.LogError(fmt.Sprintf("Config watcher error: %v", err))
 
 		case sig := <-sigChan:
-			handleSignal(sig, *appPtr)
+			handleSignal(sig, rt)
 			return
 		}
 	}
 }
 
-func handleSignal(sig os.Signal, app *fiber.App) {
-	mslogger.LogWarn(fmt.Sprintf("Signal received (%s), shutting down gracefully...", sig))
-	_ = app.Shutdown()
+
+func handleSignal(sig os.Signal, rt *Runtime) {
+	rt.Mu.Lock()
+	defer rt.Mu.Unlock()
+
+	mslogger.LogWarn(
+		fmt.Sprintf("Signal received (%s), shutting down gracefully...", sig),
+	)
+
+	if rt.App != nil {
+		_ = rt.App.Shutdown()
+	}
+
 	mslogger.LogInfo("MockServer stopped. Goodbye! 👋")
 }

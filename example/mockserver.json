@@ -28,6 +28,153 @@
   },
   "routes": [
     {
+      "name": "Make Payment",
+      "path": "/payment",
+      "method": "POST",
+      "body_schema": {
+        "type": "object",
+        "properties": {
+          "amount": { "type": "number" }
+        },
+        "required": ["amount"]
+      },
+      "body_example": {
+        "amount": 1001
+      },
+      "request_headers": {
+        "Auth": {
+          "type": "string",
+          "required": true,
+          "description": "Authorization token for API",
+          "example": "valid-token"
+        }
+      },
+      "cases": [
+        {
+          "when": "request.body.amount > 1000",
+          "then": {
+            "status": 403,
+            "body": { "error": "Limit exceeded" }
+          }
+        },
+        {
+          "when": "request.headers.Auth == 'valid-token'",
+          "then": {
+            "status": 200,
+            "body": { "status": "success" }
+          }
+        }
+      ],
+      "default": {
+        "status": 401,
+        "body": { "error": "Unauthorized" }
+      }
+    },
+
+    {
+      "name": "Process Order",
+      "path": "/orders",
+      "method": "POST",
+      "body_schema": {
+        "type": "object",
+        "properties": {
+          "orderId": { "type": "string" },
+          "amount": { "type": "number" },
+          "currency": { "type": "string" },
+          "priority": { "type": "string", "enum": ["low", "medium", "high"] }
+        },
+        "required": ["orderId", "amount", "currency"]
+      },
+      "body_example": {
+        "orderId": "ORD123456",
+        "amount": 2500,
+        "currency": "USD",
+        "priority": "high"
+      },
+      "request_headers": {
+        "Auth": {
+          "type": "string",
+          "required": true,
+          "description": "Authorization token",
+          "example": "valid-token"
+        },
+        "X-Source": {
+          "type": "string",
+          "required": false,
+          "description": "Order source (web, mobile, api)",
+          "example": "web"
+        }
+      },
+      "cases": [
+        {
+          "when": "request.body.amount > 5000",
+          "then": {
+            "status": 403,
+            "body": { "error": "Amount exceeds allowed limit" },
+            "headers": { "Retry-After": "3600" },
+            "delay_ms": 100
+          }
+        },
+        {
+          "when": "request.body.currency != 'USD'",
+          "then": {
+            "status": 400,
+            "body": { "error": "Unsupported currency" }
+          }
+        },
+        {
+          "when": "request.headers.auth != 'valid-token'",
+          "then": {
+            "status": 401,
+            "body": { "error": "Unauthorized" },
+            "delay_ms": 50
+          }
+        },
+        {
+          "when": "request.body.priority == 'high' AND request.body.amount <= 5000",
+          "then": {
+            "status": 200,
+            "body": {
+              "orderId": "{{request.body.orderId}}",
+              "status": "processed",
+              "estimatedDelivery": "{{dateFuture days=1}}"
+            },
+            "headers": { "X-Priority": "high" },
+            "delay_ms": 200
+          }
+        },
+        {
+          "when": "request.body.priority == 'medium'",
+          "then": {
+            "status": 200,
+            "body": {
+              "orderId": "{{request.body.orderId}}",
+              "status": "queued",
+              "estimatedDelivery": "{{dateFuture days=3}}"
+            },
+            "headers": { "X-Priority": "medium" }
+          }
+        },
+        {
+          "when": "request.body.priority == 'low'",
+          "then": {
+            "status": 200,
+            "body": {
+              "orderId": "{{request.body.orderId}}",
+              "status": "queued",
+              "estimatedDelivery": "{{dateFuture days=5}}"
+            },
+            "headers": { "X-Priority": "low" }
+          }
+        }
+      ],
+      "default": {
+        "status": 400,
+        "body": { "error": "Invalid order request" }
+      }
+    },
+
+    {
       "name": "Get All Users",
       "tag": "Users",
       "method": "GET",

@@ -5,14 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-
-	"regexp"
 	"strings"
 	"time"
-)
 
-import (
-	"github.com/brianvoe/gofakeit/v6"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -22,9 +17,8 @@ import (
 	server_utils "mockserver/server/utils"
 )
 
-// validateDelay checks if the provided delay (in milliseconds) is valid.
-// Ensures the delay does not exceed 10 seconds (10000 ms).
-// Returns the valid delay or an error if the limit is exceeded.
+// validateDelay ensures the artificial delay does not exceed the safety limit (10 seconds).
+// This prevents configuration errors from causing long-hanging connections.
 func validateDelay(delay int) (int, error) {
 	if delay > 10000 {
 		return 0, fmt.Errorf("delay cannot exceed 10000 ms (10 seconds), got %d", delay)
@@ -32,9 +26,9 @@ func validateDelay(delay int) (int, error) {
 	return delay, nil
 }
 
-// mergeHeaders merges three sets of HTTP headers into one.
-// Priority order: defaults < routeHeaders < customHeaders
-// meaning later headers overwrite earlier ones if the same key exists.
+// mergeHeaders combines HTTP headers from multiple sources with a specific precedence order:
+// Default Config < Route Config < Custom Overrides.
+// Keys in later maps overwrite keys in earlier maps.
 func mergeHeaders(defaults, routeHeaders, customHeaders map[string]string) map[string]string {
 	headers := make(map[string]string)
 	for k, v := range defaults {
@@ -49,40 +43,103 @@ func mergeHeaders(defaults, routeHeaders, customHeaders map[string]string) map[s
 	return headers
 }
 
-// parseAndFilterMockData takes raw JSON template data, applies fake data generation
-// (via processTemplateJSON), unmarshals it into []map[string]interface{} and
-// applies query parameter filters using server_utils.FilteredMockData.
-// Returns the filtered slice or an error.
-func parseAndFilterMockData(data []byte, params map[string]string) ([]map[string]interface{}, error) {
-	processed, err := processTemplateJSON(data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to process template JSON: %w", err)
+func applyDelay(ms int) {
+	if ms > 0 {
+		time.Sleep(time.Duration(ms) * time.Millisecond)
 	}
+}
 
-	var arr []map[string]interface{}
-	if err := json.Unmarshal(processed, &arr); err != nil {
+// buildHeaders extracts and normalizes all request headers into a simple map.
+// Header keys are converted to lowercase for consistent case-insensitive lookups.
+func buildHeaders(c *fiber.Ctx) map[string]string {
+	h := make(map[string]string)
+	for k, v := range c.GetReqHeaders() {
+		if len(v) > 0 {
+			h[strings.ToLower(k)] = v[0]
+		}
+	}
+	return h
+}
+
+// buildQuery extracts all query parameters into a map, normalizing keys to lowercase.
+func buildQuery(c *fiber.Ctx) map[string]string {
+	q := make(map[string]string)
+	for k, v := range c.Queries() {
+		q[strings.ToLower(k)] = v
+	}
+	return q
+}
+
+// shouldParseBody determines if the HTTP method typically supports a request body.
+func shouldParseBody(c *fiber.Ctx) bool {
+	switch c.Method() {
+	case fiber.MethodPost, fiber.MethodPut, fiber.MethodPatch:
+		return len(c.Body()) > 0
+	default:
+		return false
+	}
+}
+
+// parseAndFilterMockData processes raw JSON templates and applies filtering logic.
+// 1. Unmarshals raw bytes into a generic interface.
+// 2. Executes template substitution (e.g., {{fake.Name}}).
+// 3. Normalizes single objects into a slice of objects.
+// 4. Applies query parameter filtering to the result set.
+func parseAndFilterMockData(data []byte, ctx server_utils.EContext, params map[string]string) ([]map[string]interface{}, error) {
+
+	var rawData interface{}
+	if err := json.Unmarshal(data, &rawData); err != nil {
 		return nil, fmt.Errorf("invalid JSON format: %w", err)
 	}
 
-	filtered, err := server_utils.FilteredMockData(arr, params)
+	processed, err := server_utils.ProcessTemplateJSON(rawData, ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process template JSON: %w", err)
+	}
+	var arr []interface{}
+
+	// Normalize data structure: Ensure we always work with a slice
+	switch v := processed.(type) {
+	case []interface{}:
+		arr = v
+	case map[string]interface{}:
+		// Wrap single object in array
+		arr = []interface{}{v}
+	default:
+		return nil, fmt.Errorf("mock data must be an object or array of objects")
+	}
+
+	// Type assertion for elements
+	result := make([]map[string]interface{}, 0, len(arr))
+	for _, item := range arr {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("mock array items must be objects")
+		}
+		result = append(result, m)
+	}
+
+	filtered, err := server_utils.FilteredMockData(result, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter mock data: %w", err)
 	}
 	return filtered, nil
 }
 
-// buildTargetURL builds the final request URL for fetch proxying.
-// - Replaces path parameters in the base URL (e.g. {id} → 123)
-// - Appends/overwrites query parameters
+// buildTargetURL constructs the final upstream URL for proxy requests.
+// It handles path parameter substitution (e.g., {id} -> 123) and merges
+// client query parameters with configured overrides.
 func buildTargetURL(base *url.URL, pathParams, clientQuery map[string]string, acceptedQueryParams map[string]struct{}, fetchQueryParams map[string]string) string {
 	target := *base
 
+	// Path Parameter Substitution
 	path := target.Path
 	for k, v := range pathParams {
 		path = strings.ReplaceAll(path, fmt.Sprintf("{%s}", k), v)
 	}
 	target.Path = path
 
+	// Forward allowed client params
 	q := target.Query()
 	for k, v := range clientQuery {
 		if _, ok := acceptedQueryParams[k]; ok {
@@ -98,56 +155,8 @@ func buildTargetURL(base *url.URL, pathParams, clientQuery map[string]string, ac
 	return target.String()
 }
 
-// processTemplateJSON parses JSON byte slices and replaces placeholders
-// like {{name}}, {{uuid}}, {{email}}, {{number min=10 max=99}} with
-// dynamically generated fake values using gofakeit.
-// Supports: name, uuid, email, bool, date, number(min/max).
-func processTemplateJSON(data []byte) ([]byte, error) {
-	re := regexp.MustCompile(`{{\s*([a-zA-Z0-9_]+)([^}]*)}}`)
-	return re.ReplaceAllFunc(data, func(match []byte) []byte {
-		full := string(match)
-		parts := re.FindStringSubmatch(full)
-		if len(parts) < 2 {
-			return match
-		}
-		key := parts[1]
-		args := strings.TrimSpace(parts[2])
-
-		switch key {
-		case "name":
-			return []byte(gofakeit.Name())
-		case "uuid":
-			return []byte(gofakeit.UUID())
-		case "email":
-			return []byte(gofakeit.Email())
-		case "bool":
-			return []byte(fmt.Sprintf("%v", gofakeit.Bool()))
-		case "date":
-			return []byte(gofakeit.Date().Format("2006-01-02"))
-		case "number":
-			// number min=10 max=99
-			min, max := 1, 1000
-			if args != "" {
-				for _, arg := range strings.Fields(args) {
-					if strings.HasPrefix(arg, "min=") {
-						fmt.Sscanf(arg, "min=%d", &min)
-					}
-					if strings.HasPrefix(arg, "max=") {
-						fmt.Sscanf(arg, "max=%d", &max)
-					}
-				}
-			}
-			return []byte(fmt.Sprintf("%d", gofakeit.Number(min, max)))
-		default:
-			return match
-		}
-	}), nil
-}
-
-// responseError sends a standardized error response in JSON format.
-// If returnObject=true, it both writes the JSON error to response
-// and returns the ApiError struct as error (for handler usage).
-// Otherwise, only writes the JSON error response and returns nil.
+// responseError writes a standardized JSON error response to the client.
+// It optionally returns the ApiError struct for internal error handling flows.
 func responseError(c *fiber.Ctx, status int, errCode, message string, returnObject bool) error {
 	apiErr := &ApiError{
 		Success:   false,
@@ -158,17 +167,17 @@ func responseError(c *fiber.Ctx, status int, errCode, message string, returnObje
 		Timestamp: time.Now().UTC().UnixNano() / 1e6,
 	}
 
-	if returnObject == true {
-		_ = c.Status(status).JSON(apiErr)
+	err := c.Status(status).JSON(apiErr)
 
+	if returnObject {
 		return apiErr
 	}
 
-	return c.Status(status).JSON(apiErr)
+	return err
 }
 
-// getRoutesStat computes the total number of routes, mock routes, and fetch routes
-// defined in the provided configuration.
+// getRoutesStat calculates summary statistics for the registered routes.
+// Returns (Total Routes, Mock Routes, Fetch Routes).
 func getRoutesStat(cfg *msconfig.Config) (int, int, int) {
 	routeCount := 0
 	mockCount := 0
@@ -188,9 +197,8 @@ func getRoutesStat(cfg *msconfig.Config) (int, int, int) {
 	return routeCount, mockCount, fetchCount
 }
 
-// withRouteMeta wraps a Fiber handler, injecting route metadata (type and name)
-// into the request context via c.Locals, so that middlewares or loggers
-// can access route-specific information.
+// withRouteMeta decorates a standard Fiber Handler with route metadata.
+// Used for injecting context into logs and middleware (e.g., route name, type).
 func withRouteMeta(
 	routeType string,
 	routeName string,
@@ -201,5 +209,20 @@ func withRouteMeta(
 		c.Locals(msServerHandlers.CtxRouteName, routeName)
 		c.Locals(msServerHandlers.CtxRoutePath, strings.Split(c.OriginalURL(), "?")[0]+"")
 		return handler(c)
+	}
+}
+
+// withRouteMetaContext decorates a BaseHandlerFunc (which includes EContext).
+// This is the Context-Aware version of withRouteMeta for Mock/Fetch handlers.
+func withRouteMetaContext(
+	routeType string,
+	routeName string,
+	handler BaseHandlerFunc,
+) BaseHandlerFunc {
+	return func(c *fiber.Ctx, ctx server_utils.EContext) error {
+		c.Locals(msServerHandlers.CtxRouteType, routeType)
+		c.Locals(msServerHandlers.CtxRouteName, routeName)
+		c.Locals(msServerHandlers.CtxRoutePath, strings.Split(c.OriginalURL(), "?")[0]+"")
+		return handler(c, ctx)
 	}
 }

@@ -4,9 +4,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"sync/atomic"
+	"strconv"
+	// "github.com/google/uuid"
 
 	"github.com/gofiber/fiber/v2"
+)
+
+import (
+	msconfig "mockserver/config"
 )
 
 type RequestLog struct {
@@ -40,13 +46,19 @@ type RequestLog struct {
 
 var (
 	requestLogs   = make([]RequestLog, 0, 100)
-	logChannel    = make(chan RequestLog, 100)
+	logChannel    = make(chan RequestLog, 2000)
 	getLogsChan   = make(chan chan []RequestLog)
 	maxLogRecords = 100
 )
 
+var IgnoredPaths = map[string]bool{
+	"/openapi.json": true,
+	"/favicon.ico":  true,
+}
+
 // goroutine
 func StartLogAggregator() {
+
 	go func() {
 		for {
 			select {
@@ -60,9 +72,10 @@ func StartLogAggregator() {
 				// Debug  logs filters
 				filteredLogs := make([]RequestLog, 0, len(requestLogs))
 				for _, log := range requestLogs {
-					if log.Route.Type != "internal" {
+					if log.Route.Type != "internal" && !IgnoredPaths[log.Request.Path] {
 						filteredLogs = append(filteredLogs, log)
 					}
+
 				}
 				respChan <- filteredLogs
 			}
@@ -93,12 +106,38 @@ func getClientIP(c *fiber.Ctx) string {
 	return c.IP()
 }
 
+// func safeQueries(queries map[string]string) map[string]string {
+// 	safeQueries := make(map[string]string, len(queries))
+// 	for k, v := range queries {
+// 		safeQueries[string([]byte(k))] = string([]byte(v))
+// 	}
+// 	return safeQueries
+// }
+
+var requestCounter uint64
+
 // Middleware
-func RequestLoggerMiddleware(debugPath string) fiber.Handler {
+func RequestLoggerMiddleware(debugPath string, cfg *msconfig.Config) fiber.Handler {
 	return func(c *fiber.Ctx) error {
+
+		if strings.HasPrefix(c.Path(), debugPath) || IgnoredPaths[c.Path()] || strings.HasPrefix(c.Path(), cfg.Server.Console.Path) {
+			return c.Next()
+		}
+
 		start := time.Now()
-		reqID := uuid.NewString()
+		// reqID := uuid.NewString()
+
+		count := atomic.AddUint64(&requestCounter, 1)
+		reqID := strconv.FormatUint(count, 10)
 		c.Locals(CtxRequestID, reqID)
+
+		// SAFE SNAPSHOT (BEFORE Next)
+		method := string([]byte(c.Method()))
+		originalURL := string([]byte(c.OriginalURL()))
+		// queries := safeQueries(c.Queries())
+		queries := c.Queries()
+		ip := getClientIP(c)
+		ua := string([]byte(c.Get("User-Agent")))
 
 		err := c.Next()
 
@@ -108,26 +147,11 @@ func RequestLoggerMiddleware(debugPath string) fiber.Handler {
 			DurationMs: time.Since(start).Milliseconds(),
 		}
 
-		entry.Request.Method = c.Method()
-
-		var originalPath string
-		if v := c.Locals(CtxRoutePath); v != nil {
-			originalPath = v.(string) + ""
-		} else {
-			originalPath = c.OriginalURL() + ""
-		}
-
-		entry.Request.Path = string([]byte(originalPath))
-
-		originalQueries := c.Queries()
-		safeQueries := make(map[string]string, len(originalQueries))
-		for k, v := range originalQueries {
-			safeQueries[string([]byte(k))] = string([]byte(v))
-		}
-		entry.Request.Query = safeQueries
-
-		entry.Request.IP = getClientIP(c)
-		entry.Request.UA = c.Get("User-Agent")
+		entry.Request.Method = method
+		entry.Request.Path = originalURL
+		entry.Request.Query = queries
+		entry.Request.IP = ip
+		entry.Request.UA = ua
 		entry.Response.Status = c.Response().StatusCode()
 
 		if v := c.Locals(CtxRouteType); v != nil {

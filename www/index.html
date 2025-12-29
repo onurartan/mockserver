@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en" class="antialiased">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MockServer Console</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script
+      defer
+      src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.css">
+<script src="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.js"></script> -->
+
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css"
+      rel="stylesheet"
+    />
+
+    <link href="console/css/main.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ["Inter", "sans-serif"],
+              mono: ["JetBrains Mono", "monospace"],
+            },
+            colors: {
+              brand: { 500: "#6366f1", 600: "#4f46e5", 700: "#4338ca" },
+            },
+          },
+        },
+      };
+    </script>
+    <!-- <style>
+    
+    </style> -->
+  </head>
+  <body
+    class="bg-slate-50 text-slate-900 h-screen overflow-hidden"
+    x-data="app()"
+    x-init="initApp()"
+  >
+    <div
+      x-show="initialLoading"
+      class="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-slate-900 text-white transition-opacity duration-500"
+    >
+      <div class="relative w-20 h-20 mb-4">
+        <div
+          class="absolute inset-0 border-4 border-slate-700 rounded-full"
+        ></div>
+        <div
+          class="absolute inset-0 border-4 border-t-brand-500 rounded-full animate-spin"
+        ></div>
+        <div
+          class="absolute inset-0 flex items-center justify-center font-bold text-xl"
+        >
+          MS
+        </div>
+      </div>
+      <p class="text-xs font-bold tracking-[0.2em] text-slate-500 loader-pulse">
+        INITIALIZING SYSTEM
+      </p>
+    </div>
+
+    <div
+      x-show="globalError"
+      x-cloak
+      class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm"
+    >
+      <div
+        class="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full text-center mx-4 border-t-4 border-rose-500"
+      >
+        <div
+          class="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl"
+        >
+          <i class="fas fa-plug"></i>
+        </div>
+        <h2 class="text-xl font-bold text-slate-800 mb-2">Connection Failed</h2>
+        <p class="text-slate-500 text-sm mb-6">
+          Unable to reach the MockServer API. <br />
+          <span
+            class="text-rose-500 font-mono text-xs mt-2 block bg-rose-50 p-2 rounded"
+            x-text="globalError"
+          ></span>
+        </p>
+        <button
+          @click="window.location.reload()"
+          class="w-full py-3 bg-slate-900 text-white rounded-lg font-bold hover:bg-brand-600 transition-colors shadow-lg shadow-brand-500/20"
+        >
+          Retry Connection
+        </button>
+      </div>
+    </div>
+
+    <div
+      x-show="authModalOpen"
+      x-cloak
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm"
+    >
+      <div
+        class="bg-white rounded-xl shadow-2xl w-[450px] overflow-hidden transform transition-all"
+        @click.away="authModalOpen = false"
+      >
+        <div
+          class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center"
+        >
+          <h3 class="font-bold text-slate-800 flex items-center gap-2">
+            <i class="fas fa-shield-alt text-brand-600"></i> Global Security
+          </h3>
+          <button
+            @click="authModalOpen = false"
+            class="text-slate-400 hover:text-slate-600"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="p-6 space-y-4">
+          <div
+            class="bg-blue-50 text-blue-700 px-3 py-2 rounded text-xs border border-blue-100 mb-4"
+          >
+            <i class="fas fa-info-circle mr-1"></i> Keys entered here are
+            auto-injected into headers <strong>OR</strong> query params.
+          </div>
+
+          <template x-for="(scheme, key) in globalAuthStore" :key="key">
+            <div>
+              <div class="flex justify-between mb-1">
+                <label
+                  class="block text-xs font-bold text-slate-700"
+                  x-text="scheme.type === 'bearer' ? key+'(Bearer)' : key"
+                ></label>
+
+                <span
+                  class="text-[9px] uppercase font-bold text-slate-400"
+                  x-text="scheme.in"
+                ></span>
+              </div>
+
+              <input
+                type="text"
+                x-model="scheme.value"
+                class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all shadow-sm"
+                :placeholder="scheme.type === 'bearer' ? 'Enter Bearer Token...' : 'Enter ' + key + ' value...'"
+              />
+            </div>
+          </template>
+          <div
+            x-show="Object.keys(globalAuthStore).length === 0"
+            class="text-center text-xs text-slate-400 py-4"
+          >
+            No global auth schemes found in config/OAS.
+          </div>
+        </div>
+        <div
+          class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2"
+        >
+          <button
+            @click="clearAuth()"
+            class="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            Clear
+          </button>
+          <button
+            @click="saveAuth()"
+            class="px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-brand-600 rounded-lg"
+          >
+            Save Settings
+          </button>
+        </div>
+
+        <!-- <div
+          class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end"
+        >
+          <button
+            @click="authModalOpen = false"
+            class="px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-brand-600 rounded-lg"
+          >
+            Save Config
+          </button>
+        </div> -->
+      </div>
+    </div>
+
+    <aside
+      class="fixed inset-y-0 left-0 w-72 bg-white border-r border-slate-200 flex flex-col z-30"
+    >
+      <div class="p-5 border-b border-slate-100 flex items-center gap-3">
+        <div
+          class="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white rounded-md overflow-hidden"
+        >
+          <!-- <i class="fas fa-cube"></i> -->
+          <img src="/public/logo.png" alt="" class="w-full h-full" />
+        </div>
+        <div>
+          <h1 class="font-bold text-slate-900 tracking-tight">MockServer</h1>
+          <p
+            class="text-[10px] font-bold text-slate-400 uppercase tracking-widest"
+          >
+            Console v1.0
+          </p>
+        </div>
+      </div>
+
+      <nav class="flex-1 overflow-y-auto px-4 py-6 space-y-1">
+        <div
+          class="px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2"
+        >
+          Monitor
+        </div>
+        <!-- @click="activeTab = 'dashboard'" -->
+        <button
+          @click="switchTab('dashboard')"
+          :class="activeTab === 'dashboard' ? 'bg-brand-50 text-brand-700 border-brand-200' : 'text-slate-600 hover:bg-slate-50 border-transparent'"
+          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold border transition-all mb-1"
+        >
+          <i class="fas fa-chart-pie opacity-70 w-4"></i> Dashboard
+        </button>
+        <button
+          x-show="config.server?.debug?.enabled"
+          @click="switchTab('logs')"
+          :class="activeTab === 'logs' ? 'bg-brand-50 text-brand-700 border-brand-200' : 'text-slate-600 hover:bg-slate-50 border-transparent'"
+          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold border transition-all mb-6"
+        >
+          <i class="fas fa-list-ul opacity-70 w-4"></i> Traffic Logs
+        </button>
+
+        <div
+          class="px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2"
+        >
+          Collections
+        </div>
+        <template x-for="tag in tags" :key="tag">
+          <!--  @click="activeTab = tag" -->
+          <button
+            @click="switchTab(tag)"
+            @click="activeTab = tag"
+            :class="activeTab === tag ? 'bg-slate-100 text-slate-900 font-bold' : 'text-slate-500 hover:bg-slate-50 font-medium'"
+            class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all group"
+          >
+            <div class="flex items-center gap-3">
+              <i
+                class="fas text-slate-400 group-hover:text-brand-500 transition-colors"
+                :class="tag === 'Default' ? 'fa-inbox' : 'fa-folder'"
+              ></i
+              ><span x-text="tag"></span>
+            </div>
+            <span
+              class="text-[9px] font-bold bg-white border border-slate-200 px-1.5 rounded text-slate-400"
+              x-text="routes.filter(r => r.tag === tag).length"
+            ></span>
+          </button>
+        </template>
+      </nav>
+
+      <div class="px-4 mt-auto mb-4" x-show="user">
+        <div
+          class="bg-slate-50 rounded-xl border border-slate-200 p-3 shadow-sm"
+        >
+          <div class="flex items-center gap-3 mb-3">
+            <img
+              :src="user.avatar"
+              class="w-8 h-8 rounded-lg border border-white shadow-sm"
+              alt="User avatar"
+            />
+            <div class="flex-1 min-w-0">
+              <p
+                class="text-xs font-bold text-slate-800 truncate"
+                x-text="user.username"
+              ></p>
+              <p
+                class="text-[9px] font-medium text-slate-400 uppercase tracking-tighter"
+                x-text="user.role"
+              ></p>
+            </div>
+          </div>
+
+          <button
+            @click="logout()"
+            class="w-full py-1.5 px-3 bg-white border border-slate-200 hover:border-rose-200 hover:text-rose-600 text-slate-500 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-2 group"
+          >
+            <i
+              class="fas fa-sign-out-alt group-hover:rotate-12 transition-transform"
+            ></i>
+            Sign Out
+          </button>
+        </div>
+      </div>
+      <div class="p-4 border-t border-slate-100 bg-slate-50">
+        <div class="flex flex-col gap-1 text-[10px] text-slate-500 font-mono">
+          <div class="flex justify-between">
+            <span>Version:</span>
+            <span
+              class="font-bold text-slate-700"
+              x-text="health?.version || '-'"
+            ></span>
+          </div>
+          <div class="flex justify-between">
+            <span>Uptime:</span>
+            <span
+              class="font-bold text-slate-700"
+              x-text="formatUptime(health?.uptime)"
+            ></span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="ml-72 h-full flex flex-col relative bg-slate-50">
+      <header
+        class="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-20"
+      >
+        <div class="flex items-center gap-2 text-sm font-medium text-slate-500">
+          <span>Console</span>
+          <i class="fas fa-chevron-right text-[10px] text-slate-300"></i>
+          <span class="text-slate-900 font-bold" x-text="getTabTitle()"></span>
+        </div>
+        <div class="flex items-center gap-4">
+          <div class="relative w-64" x-show="activeTab !== 'logs'">
+            <i
+              class="fas fa-search absolute left-3 top-2.5 text-slate-400 text-xs"
+            ></i>
+            <input
+              x-model="search"
+              type="text"
+              placeholder="Filter routes..."
+              class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all shadow-sm sw-input !pl-9 !rounded-full"
+            />
+          </div>
+          <button
+            @click="refreshData()"
+            class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border bg-white border-slate-200 text-slate-600 hover:text-brand-600 hover:bg-[#f7f7f7] active:scale-95 hover:border-brand-300 transition-all"
+          >
+            <i
+              class="fas fa-sync-alt"
+              :class="logsLoading ? 'fa-spin' : ''"
+            ></i>
+            Refresh
+          </button>
+          <button
+            @click="authModalOpen = true"
+            class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border hover:bg-[#f7f7f7] active:scale-95 transition-all"
+            :class="hasGlobalAuth() ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-slate-200 text-slate-600 hover:border-brand-300'"
+          >
+            <i
+              class="fas"
+              :class="hasGlobalAuth() ? 'fa-lock' : 'fa-lock-open'"
+            ></i
+            ><span x-text="hasGlobalAuth() ? 'Authorized' : 'Authorize'"></span>
+          </button>
+        </div>
+      </header>
+
+      <div
+        x-show="loading"
+        class="flex-1 flex flex-col items-center justify-center"
+      >
+        <i class="fas fa-circle-notch fa-spin text-4xl text-brand-600 mb-4"></i>
+        <p class="text-sm font-bold text-slate-500">Loading System Config...</p>
+      </div>
+
+      <div
+        x-show="!loading"
+        class="flex-1 overflow-y-auto p-8 scroll-smooth"
+        x-cloak
+      >
+        <div class="max-w-6xl mx-auto space-y-8">
+          <div
+            x-show="activeTab === 'dashboard'"
+            x-transition
+            class="space-y-8"
+          >
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-5">
+              <div
+                class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"
+              >
+                <p
+                  class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1"
+                >
+                  Total Routes
+                </p>
+                <p
+                  class="text-3xl font-black text-slate-900"
+                  x-text="health?.route_count || routes.length"
+                ></p>
+                <div class="mt-2 text-[10px] text-slate-400 flex gap-2">
+                  <span
+                    ><strong
+                      class="text-emerald-600"
+                      x-text="health?.mock_routes || 0"
+                    ></strong>
+                    Mock</span
+                  ><span
+                    ><strong
+                      class="text-blue-600"
+                      x-text="health?.fetch_routes || 0"
+                    ></strong>
+                    Proxy</span
+                  >
+                </div>
+              </div>
+              <div
+                class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"
+              >
+                <p
+                  class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1"
+                >
+                  Global Delay
+                </p>
+                <div class="flex items-baseline gap-1">
+                  <span
+                    class="text-3xl font-black text-slate-900"
+                    x-text="config.server?.default_delay_ms || 0"
+                  ></span
+                  ><span class="text-xs font-bold text-slate-400">ms</span>
+                </div>
+              </div>
+              <div
+                class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"
+              >
+                <p
+                  class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1"
+                >
+                  Auth Layer
+                </p>
+                <div class="flex items-center gap-2 mt-1">
+                  <span
+                    class="text-xl font-bold text-slate-800"
+                    x-text="config.server?.auth?.enabled ? 'Active' : 'Bypassed'"
+                  ></span
+                  ><span
+                    class="text-[10px] bg-slate-100 border px-1.5 rounded uppercase font-mono"
+                    x-text="config.server?.auth?.type"
+                  ></span>
+                </div>
+              </div>
+              <div
+                class="bg-slate-900 p-5 rounded-xl shadow-lg text-white relative overflow-hidden"
+              >
+                <p
+                  class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1"
+                >
+                  System Health
+                </p>
+                <div class="flex items-center gap-2 mt-2">
+                  <span
+                    class="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+                  ></span>
+                  <span
+                    class="font-bold text-emerald-400 uppercase tracking-wide"
+                    x-text="health?.status || 'Unknown'"
+                  ></span>
+                </div>
+                <div
+                  class="mt-4 text-[10px] text-slate-500 font-mono opacity-80"
+                >
+                  Started: <span x-text="formatDate(health?.start_time)"></span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h3 class="text-sm font-bold text-slate-800 mb-4 ml-1">
+                Architecture Overview
+              </h3>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div
+                  class="bg-gradient-to-br from-white to-slate-50 p-6 rounded-xl border border-slate-200"
+                >
+                  <div class="flex justify-between items-center mb-3">
+                    <span
+                      class="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-1 rounded"
+                      >Stateful</span
+                    ><span
+                      class="text-2xl font-black text-slate-800"
+                      x-text="routes.filter(r => r.stateful).length"
+                    ></span>
+                  </div>
+                  <p class="text-xs text-slate-500 leading-relaxed">
+                    Endpoints backed by in-memory storage.
+                  </p>
+                </div>
+                <div
+                  class="bg-gradient-to-br from-white to-slate-50 p-6 rounded-xl border border-slate-200"
+                >
+                  <div class="flex justify-between items-center mb-3">
+                    <span
+                      class="text-xs font-bold text-indigo-700 bg-indigo-100 px-2 py-1 rounded"
+                      >Logic</span
+                    ><span
+                      class="text-2xl font-black text-slate-800"
+                      x-text="routes.filter(r => r.cases).length"
+                    ></span>
+                  </div>
+                  <p class="text-xs text-slate-500 leading-relaxed">
+                    Endpoints with conditional case logic.
+                  </p>
+                </div>
+                <div
+                  class="bg-gradient-to-br from-white to-slate-50 p-6 rounded-xl border border-slate-200"
+                >
+                  <div class="flex justify-between items-center mb-3">
+                    <span
+                      class="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded"
+                      >Proxy</span
+                    ><span
+                      class="text-2xl font-black text-slate-800"
+                      x-text="routes.filter(r => r.fetch).length"
+                    ></span>
+                  </div>
+                  <p class="text-xs text-slate-500 leading-relaxed">
+                    Endpoints forwarding to upstream APIs.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div x-show="activeTab === 'logs'" x-transition>
+            <div
+              class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden"
+            >
+              <table class="w-full text-left">
+                <thead class="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th
+                      class="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest"
+                    >
+                      Time
+                    </th>
+                    <th
+                      class="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest"
+                    >
+                      Method
+                    </th>
+                    <th
+                      class="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest"
+                    >
+                      Path
+                    </th>
+                    <th
+                      class="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest"
+                    >
+                      Status
+                    </th>
+                    <th
+                      class="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest"
+                    >
+                      Latency
+                    </th>
+                    <th
+                      class="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest"
+                    >
+                      IP
+                    </th>
+                  </tr>
+                </thead>
+                <!-- <tbody class="divide-y divide-slate-100"> -->
+                <template x-for="log in logs" :key="log.id">
+                  <tbody
+                    x-data="{ expanded: false }"
+                    class="divide-y divide-slate-100"
+                  >
+                    <tr
+                      class="hover:bg-slate-50 cursor-pointer transition-colors group"
+                      @click="expanded = !expanded"
+                    >
+                      <td
+                        class="px-4 py-3 text-xs font-mono text-slate-500"
+                        x-text="formatTime(log.time)"
+                      ></td>
+                      <td class="px-4 py-3">
+                        <span
+                          class="text-[10px] font-black px-1.5 py-0.5 rounded border uppercase"
+                          :class="methodColor(log.request.method)"
+                          x-text="log.request.method"
+                        ></span>
+                      </td>
+                      <td
+                        class="px-4 py-3 text-xs font-mono font-bold text-slate-700"
+                        x-text="log.request.path"
+                      ></td>
+                      <td class="px-4 py-3">
+                        <div class="flex items-center gap-1.5">
+                          <span
+                            class="w-2 h-2 rounded-full"
+                            :class="statusColor(log.response.status).dot"
+                          ></span
+                          ><span
+                            class="text-xs font-bold"
+                            :class="statusColor(log.response.status).text"
+                            x-text="log.response.status"
+                          ></span>
+                        </div>
+                      </td>
+                      <td
+                        class="px-4 py-3 text-xs font-mono text-slate-500"
+                        x-text="log.duration_ms + ' ms'"
+                      ></td>
+                      <td
+                        class="px-4 py-3 text-xs font-mono text-slate-400"
+                        x-text="log.request.ip"
+                      ></td>
+                    </tr>
+                    <tr x-show="expanded" class="bg-slate-50">
+                      <td colspan="6" class="p-4 border-b border-slate-100">
+                        <div class="grid grid-cols-2 gap-4">
+                          <div
+                            class="bg-white p-3 rounded border border-slate-200"
+                          >
+                            <div
+                              class="text-[10px] font-bold text-slate-400 uppercase mb-1"
+                            >
+                              User Agent
+                            </div>
+                            <div
+                              class="text-xs font-mono text-slate-600 break-all"
+                              x-text="log.request.user_agent"
+                            ></div>
+                          </div>
+                          <div
+                            x-show="log.upstream"
+                            class="bg-white p-3 rounded border border-slate-200"
+                          >
+                            <div
+                              class="text-[10px] font-bold text-emerald-600 uppercase mb-1 flex justify-between"
+                            >
+                              <span>Upstream Proxy</span
+                              ><span
+                                x-text="log.upstream.duration_ms + 'ms'"
+                              ></span>
+                            </div>
+                            <div
+                              class="text-xs font-mono text-slate-600 break-all"
+                              x-text="log.upstream.url"
+                            ></div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </template>
+                <!-- </tbody> -->
+              </table>
+              <div
+                x-show="logs.length === 0"
+                class="p-12 text-center text-slate-400 text-sm"
+              >
+                No traffic recorded yet.
+              </div>
+            </div>
+          </div>
+
+          <div x-show="!['logs'].includes(activeTab)" class="space-y-4">
+            <div
+              x-show="activeTab === 'dashboard'"
+              class="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 border-t border-slate-200"
+            >
+              Active Routes
+            </div>
+            <template x-for="route in filteredRoutes" :key="route.uniqueId">
+              <div
+                x-data="routeCard(route, config, oas, globalAuthStore)"
+                class="bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
+              >
+                <div
+                  class="flex items-center p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                  @click="toggle()"
+                >
+                  <div class="w-24 flex-shrink-0">
+                    <span
+                      class="text-[10px] font-black uppercase px-2 py-1 rounded border inline-block w-16 text-center"
+                      :class="methodColor(route.method)"
+                      x-text="route.method"
+                    ></span>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span
+                        class="text-sm font-bold font-mono text-slate-700 truncate"
+                        x-text="config.server.api_prefix + route.path"
+                      ></span>
+
+                      <span
+                        class="text-[12px] text-gray-500"
+                        x-text="route.name"
+                      ></span>
+
+                      <!-- BADGES -->
+                      <template x-for="b in  badges" :key="b">
+                        <span
+                          class="text-[9px] font-black uppercase px-2 py-0.5 rounded border"
+                          :class="badgeColor(b)"
+                          x-text="badgeLabel(b)"
+                        ></span>
+                      </template>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-4 text-xs text-slate-400">
+                    <span
+                      x-show="route.stateful"
+                      class="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-bold border border-amber-100"
+                      ><i class="fas fa-database"></i> Stateful</span
+                    >
+                    <span
+                      x-show="route.cases"
+                      class="flex items-center gap-1 text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full font-bold border border-brand-100"
+                      ><i class="fas fa-code-branch"></i> Logic</span
+                    >
+                    <i
+                      class="fas"
+                      :class="expanded ? 'fa-chevron-up' : 'fa-chevron-down'"
+                    ></i>
+                  </div>
+                </div>
+
+                <div
+                  x-show="expanded"
+                  x-collapse
+                  class="border-t border-slate-200"
+                >
+                  <div
+                    class="bg-slate-50 border-b border-slate-100 px-6 py-2 text-xs flex gap-6 font-mono text-slate-500"
+                  >
+                    <div x-show="route.fetch" class="flex items-center gap-2">
+                      <i class="fas fa-cloud-download-alt text-emerald-500"></i>
+                      Proxy:
+                      <span
+                        class="text-slate-700 select-all"
+                        x-text="route.fetch.url"
+                      ></span>
+                    </div>
+                    <div
+                      x-show="route.mock?.file"
+                      class="flex items-center gap-2"
+                    >
+                      <i class="fas fa-file-code text-blue-500"></i> File:
+                      <span
+                        class="text-slate-700 select-all"
+                        x-text="route.mock.file"
+                      ></span>
+                    </div>
+                    <div x-show="route.cases" class="flex items-center gap-2">
+                      <i class="fas fa-code-branch text-brand-500"></i> Logic
+                      Cases:
+                      <span
+                        class="text-slate-700"
+                        x-text="route.cases.length"
+                      ></span>
+                    </div>
+                  </div>
+
+                  <!-- divide-y lg:divide-y-0 lg:divide-x divide-slate-200 -->
+                  <div class="grid grid-cols-1 lg:grid-cols-2">
+                    <div
+                      class="p-6 bg-white flex flex-col border-b border-r border-t border-slate-200 h-full"
+                    >
+                      <div class="flex justify-between items-center mb-4">
+                        <h4
+                          class="text-xs font-black text-slate-400 uppercase tracking-widest"
+                        >
+                          Request Setup
+                        </h4>
+                        <button
+                          @click="resetForm()"
+                          class="text-xs font-bold text-brand-600 hover:underline"
+                        >
+                          Reset
+                        </button>
+                      </div>
+
+                      <div
+                        x-show="errorMessage"
+                        class="bg-rose-50 text-rose-600 p-3 rounded-lg text-xs font-bold mb-4 flex items-center gap-2"
+                      >
+                        <i class="fas fa-exclamation-circle"></i>
+
+                        <span x-text="errorMessage"></span>
+                      </div>
+
+                      <div class="space-y-4 flex-1">
+                        <template x-for="p in params" :key="p.name">
+                          <div class="grid grid-cols-12 gap-2 items-center">
+                            <div class="col-span-4">
+                              <div class="flex items-center gap-1">
+                                <span
+                                  class="text-xs font-bold text-slate-700 font-mono break-all"
+                                  x-text="p.name"
+                                ></span>
+                                <span
+                                  x-show="p.required"
+                                  class="text-rose-500 font-bold"
+                                  >*</span
+                                >
+                              </div>
+                              <div class="text-[10px] text-slate-400 mt-0.5">
+                                <span x-text="p.in"></span> •
+                                <span x-text="p.type"></span>
+                              </div>
+                            </div>
+                            <div class="col-span-8">
+                              <input
+                                type="text"
+                                x-model="p.value"
+                                :class="errors[p.name] ? 'w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all shadow-sm border-rose-300 focus:border-rose-500 focus:ring-rose-500/20 bg-rose-50/10' : 'w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all shadow-sm'"
+                                :placeholder="p.example || p.name"
+                              />
+                            </div>
+                          </div>
+                        </template>
+
+                        <div
+                          x-show="['POST', 'PUT', 'PATCH'].includes(route.method)"
+                          class="pt-4 border-t border-slate-100"
+                        >
+                          <div class="flex justify-between items-end mb-2">
+                            <span class="text-xs font-bold text-slate-700"
+                              >Body <span class="text-rose-500">*</span></span
+                            >
+                            <span
+                              class="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-mono"
+                              >JSON</span
+                            >
+                          </div>
+                          <div class="relative group">
+                            <textarea
+                              x-model="body"
+                              rows="6"
+                              class="w-full bg-[#2d2d2d] text-[#e0e0e0] text-xs font-mono p-4 rounded-lg border border-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none resize-y selection:bg-emerald-500/30 placeholder-slate-600"
+                              placeholder='{"key": "value"}'
+                            ></textarea>
+                          </div>
+                        </div>
+
+                        <button
+                          @click="runRequest()"
+                          :disabled="reqLoading"
+                          class="w-full mt-2 bg-slate-900 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-brand-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-slate-900/20"
+                        >
+                          <i
+                            class="fas"
+                            :class="reqLoading ? 'fa-spinner fa-spin' : 'fa-play'"
+                          ></i>
+                          <span
+                            x-text="reqLoading ? 'Sending...' : 'Execute Request'"
+                          ></span>
+                        </button>
+                      </div>
+
+                      <div
+                        x-show="docs.responses && docs.responses.length > 0"
+                        class="mt-1 pt-5 border-t border-slate-100"
+                      >
+                        <h4
+                          class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3"
+                        >
+                          Expected Responses
+                        </h4>
+                        <div class="space-y-2">
+                          <template
+                            x-for="res in docs.responses"
+                            :key="res.code"
+                          >
+                            <div
+                              class="flex items-center gap-3 text-xs p-2 rounded hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-colors"
+                            >
+                              <span
+                                class="font-mono font-bold w-8 text-right"
+                                :class="statusColor(res.code).text"
+                                x-text="res.code"
+                              ></span>
+                              <span
+                                class="text-slate-500 flex-1 truncate"
+                                x-text="res.description || 'No description'"
+                              ></span>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      class="p-6 bg-slate-50 flex flex-col border-b border-t border-slate-200 h-full min-h-[450px] overflow-hidden"
+                    >
+                      <div
+                        class="flex justify-between items-center mb-4 shrink-0"
+                      >
+                        <h4
+                          class="text-xs font-black text-slate-400 uppercase tracking-widest"
+                        >
+                          Execution Result
+                        </h4>
+                        <div x-show="result" class="flex gap-2">
+                          <span
+                            class="text-[10px] font-mono font-bold px-2 py-1 rounded bg-white border border-slate-200 text-slate-600"
+                            x-text="result?.latency + ' ms'"
+                          ></span>
+                          <span
+                            class="text-[10px] font-mono font-bold px-2 py-1 rounded text-white shadow-sm"
+                            :class="result?.status >= 400 ? 'bg-rose-500' : 'bg-emerald-500'"
+                            x-text="result?.status"
+                          ></span>
+                        </div>
+                      </div>
+
+                      <div
+                        x-show="!result && !reqLoading"
+                        class="flex-1 flex flex-col items-center justify-center text-slate-300 border-2 border-dashed border-slate-200 rounded-xl bg-white/50 p-8 text-center"
+                      >
+                        <div
+                          class="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-3 shadow-sm border border-slate-100"
+                        >
+                          <i class="fas fa-bolt text-lg opacity-30"></i>
+                        </div>
+                        <p
+                          class="text-xs font-bold uppercase tracking-widest mb-1 text-slate-400"
+                        >
+                          Ready
+                        </p>
+                        <p class="text-[10px] text-slate-400">
+                          Waiting for request execution...
+                        </p>
+                      </div>
+
+                      <div
+                        x-show="reqLoading"
+                        class="flex-1 flex flex-col items-center justify-center text-brand-600"
+                      >
+                        <div
+                          class="w-10 h-10 border-4 border-slate-200 border-t-brand-500 rounded-full animate-spin"
+                        ></div>
+                        <p
+                          class="mt-4 text-xs font-bold uppercase tracking-widest text-slate-400"
+                        >
+                          Processing...
+                        </p>
+                      </div>
+
+                      <div
+                        x-show="result && !reqLoading"
+                        class="flex-1 overflow-y-auto pr-1 custom-scrollbar space-y-4"
+                      >
+                        <div
+                          class="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm"
+                        >
+                          <div
+                            class="px-3 py-2 border-b border-slate-100 flex justify-between items-center bg-slate-50/50"
+                          >
+                            <span
+                              class="text-[10px] font-bold text-slate-500 uppercase"
+                              >Request Details</span
+                            >
+                            <div class="flex gap-2">
+                              <button
+                                @click="copyText(curlCmd, 'curl')"
+                                class="text-[10px] text-slate-400 hover:text-brand-600 transition-colors flex items-center gap-1"
+                              >
+                                <i
+                                  class="fas"
+                                  :class="activeCopy === 'curl' ? 'fa-check text-emerald-500' : 'fa-terminal'"
+                                ></i>
+                                <span
+                                  x-text="activeCopy === 'curl' ? 'Copied' : 'Copy cURL'"
+                                ></span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <div class="bg-[#292d3e] p-3 group relative">
+                            <pre
+                              class="!m-0 !p-0 !bg-transparent text-[10px] overflow-x-auto whitespace-pre-wrap break-all custom-scrollbar max-h-32"
+                            ><code class="language-bash" x-html="highlightedCurl"></code></pre>
+                          </div>
+
+                          <div
+                            class="px-3 py-2 bg-white border-t border-slate-100 flex items-center justify-between gap-2 text-[10px] font-mono"
+                          >
+                            <div
+                              class="flex items-center gap-2 overflow-hidden"
+                            >
+                              <span class="font-bold text-slate-400 shrink-0"
+                                >URL</span
+                              >
+                              <span
+                                class="text-[#595959] font-bold truncate select-all bg-[#f7f7f7] px-1.5 py-0.5 rounded border border-[#ebebeb]"
+                                x-text="reqUrl"
+                              ></span>
+                            </div>
+                            <button
+                              @click="copyText(reqUrl, 'url')"
+                              class="text-slate-400 hover:text-brand-600 transition-colors"
+                            >
+                              <i
+                                class="fas"
+                                :class="activeCopy === 'url' ? 'fa-check text-emerald-500' : 'fa-link'"
+                              ></i>
+                            </button>
+                          </div>
+                        </div>
+
+                        <div
+                          x-data="{ openHeaders: false }"
+                          class="bg-white border border-slate-200 rounded-lg shadow-sm"
+                        >
+                          <button
+                            @click="openHeaders = !openHeaders"
+                            class="w-full flex justify-between items-center px-3 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                          >
+                            <span class="flex items-center gap-2"
+                              ><i class="fas fa-list-ul text-slate-300"></i>
+                              Response Headers</span
+                            >
+                            <div class="flex items-center gap-2">
+                              <span
+                                class="text-[9px] bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded border border-slate-200"
+                                x-text="Object.keys(resHeaders).length + ' items'"
+                              ></span>
+                              <i
+                                class="fas fa-chevron-down text-[10px] transition-transform text-slate-400"
+                                :class="openHeaders ? 'rotate-180' : ''"
+                              ></i>
+                            </div>
+                          </button>
+                          <div
+                            x-show="openHeaders"
+                            x-collapse
+                            class="border-t border-slate-100 bg-slate-50/30"
+                          >
+                            <div
+                              class="p-3 grid grid-cols-[minmax(120px,max-content)_1fr] gap-x-4 gap-y-1.5 text-[10px] font-mono"
+                            >
+                              <template
+                                x-for="(val, key) in resHeaders"
+                                :key="key"
+                              >
+                                <div class="contents hover:bg-slate-100">
+                                  <span
+                                    class="text-slate-500 text-right truncate select-none"
+                                    x-text="key"
+                                  ></span>
+                                  <span
+                                    class="text-slate-700 break-all select-all"
+                                    x-text="val"
+                                  ></span>
+                                </div>
+                              </template>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div
+                          class="relative group/code bg-[#292d3e] rounded-lg border border-slate-800 shadow-md flex flex-col min-h-[300px] max-h-[375px]"
+                        >
+                          <div
+                            class="flex justify-between items-center px-3 py-2 bg-[#1f222e] border-b border-[#3c4155] sticky top-0 z-10 rounded-t-lg"
+                          >
+                            <div class="flex items-center gap-2">
+                              <span
+                                class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"
+                                x-show="!result.body && result.type !== 'image'"
+                              ></span>
+                              <span
+                                class="text-[10px] font-bold text-slate-300 uppercase tracking-wider"
+                                x-text="result.contentType || 'RESPONSE'"
+                              ></span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                              <span
+                                class="text-[9px] text-slate-500 font-mono border-r border-slate-600 pr-3 mr-1"
+                                x-text="result.body ? (result.body.length > 1024 ? (result.body.length/1024).toFixed(1) + ' KB' : result.body.length + ' B') : ''"
+                              ></span>
+                              <button
+                                @click="copyText(result.body, 'body')"
+                                x-show="result.type === 'text'"
+                                class="text-[10px] text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors"
+                              >
+                                <i
+                                  class="far"
+                                  :class="activeCopy === 'body' ? 'fa-check-circle text-emerald-400' : 'fa-copy'"
+                                ></i>
+                                <span
+                                  x-text="activeCopy === 'body' ? 'Copied' : 'Copy'"
+                                ></span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <div class="relative flex-1 overflow-x-hidden">
+                            <template x-if="result.type === 'text'">
+                              <pre
+                                class="!m-0 !p-4 !bg-transparent text-xs font-mono leading-relaxed !overflow-x-auto custom-scrollbar"
+                              ><code class="language-json" x-html="highlightedBody"></code></pre>
+                            </template>
+
+                            <template x-if="result.type === 'image'">
+                              <div
+                                class="flex flex-col items-center justify-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-[#1f222e] p-8 h-full min-h-[300px]"
+                              >
+                                <img
+                                  :src="result.blobUrl"
+                                  class="max-w-full max-h-[250px] object-contain shadow-2xl rounded-lg border border-slate-700 mb-4"
+                                />
+                                <a
+                                  :href="result.blobUrl"
+                                  download="image"
+                                  class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs rounded border border-slate-600 transition-colors flex items-center gap-2"
+                                >
+                                  <i class="fas fa-download"></i> Download
+                                </a>
+                              </div>
+                            </template>
+
+                            <template x-if="result.type === 'pdf'">
+                              <div
+                                class="flex flex-col items-center justify-center text-slate-400 h-full min-h-[300px] p-8"
+                              >
+                                <div
+                                  class="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-4 border border-slate-700"
+                                >
+                                  <i
+                                    class="fas fa-file-pdf text-3xl text-rose-500"
+                                  ></i>
+                                </div>
+                                <p class="text-sm font-bold text-slate-200">
+                                  PDF Document
+                                </p>
+                                <p class="text-[10px] text-slate-500 mt-1 mb-6">
+                                  Preview is not supported in the console.
+                                </p>
+                                <a
+                                  :href="result.blobUrl"
+                                  download="document.pdf"
+                                  class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded text-xs font-bold transition-all shadow-lg shadow-rose-500/20"
+                                >
+                                  Download PDF
+                                </a>
+                              </div>
+                            </template>
+
+                            <template x-if="result.type === 'blob'">
+                              <div
+                                class="flex flex-col items-center justify-center text-slate-500 h-full min-h-[300px] p-8"
+                              >
+                                <i
+                                  class="fas fa-file-binary text-4xl mb-3 text-indigo-400"
+                                ></i>
+                                <p class="text-xs font-mono">Binary Content</p>
+                              </div>
+                            </template>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      x-show="route.cases && route.cases.length > 0"
+                      class="col-span-1 lg:col-span-2 border-t border-slate-200 bg-slate-50/50 p-6"
+                    >
+                      <div class="flex items-center gap-2 mb-6">
+                        <div
+                          class="w-8 h-8 bg-brand-100 text-brand-600 rounded-lg flex items-center justify-center shadow-sm"
+                        >
+                          <i class="fas fa-code-branch text-sm"></i>
+                        </div>
+                        <div>
+                          <h4
+                            class="text-xs font-black text-slate-800 uppercase tracking-widest"
+                          >
+                            Logic Engine
+                          </h4>
+                          <p
+                            class="text-[10px] text-slate-400 font-medium uppercase mt-0.5"
+                          >
+                            Conditional Response Mapping
+                          </p>
+                        </div>
+                      </div>
+
+                      <div
+                        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                      >
+                        <template
+                          x-for="(cs, index) in route.cases"
+                          :key="index"
+                        >
+                          <div
+                            class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm hover:border-brand-300 transition-all group"
+                          >
+                            <div
+                              class="px-4 py-3 bg-slate-900 text-white flex items-center justify-between"
+                            >
+                              <span
+                                class="text-[10px] font-black uppercase tracking-tighter opacity-70"
+                                >Case #<span x-text="index + 1"></span
+                              ></span>
+                              <span
+                                class="text-[9px] font-bold bg-brand-500 px-1.5 py-0.5 rounded uppercase"
+                                >If Match</span
+                              >
+                            </div>
+
+                            <div class="p-4 space-y-4">
+                              <div>
+                                <span
+                                  class="text-[9px] font-black text-slate-400 uppercase block mb-1"
+                                  >When Condition:</span
+                                >
+                                <code
+                                  class="text-[11px] font-mono text-brand-600 bg-brand-50 px-2 py-1 rounded block break-all border border-brand-100"
+                                  x-text="cs.when"
+                                ></code>
+                              </div>
+
+                              <div class="pt-3 border-t border-slate-100">
+                                <span
+                                  class="text-[9px] font-black text-slate-400 uppercase block mb-2"
+                                  >Then Respond With:</span
+                                >
+                                <div class="flex items-center gap-3 mb-3">
+                                  <span
+                                    :class="statusColor(cs.then.status).text + ' ' + statusColor(cs.then.status).dot.replace('bg-', 'border-')"
+                                    class="text-xs font-bold px-2 py-0.5 rounded border bg-white shadow-sm"
+                                    x-text="cs.then.status"
+                                  ></span>
+
+                                  <span
+                                    x-show="cs.then.delay_ms"
+                                    class="text-[10px] font-mono text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100"
+                                  >
+                                    <i class="far fa-clock mr-1"></i
+                                    ><span x-text="cs.then.delay_ms"></span>ms
+                                  </span>
+                                </div>
+
+                                <div
+                                  class="relative rounded-lg overflow-hidden border border-slate-800"
+                                >
+                                  <div class="absolute top-0 right-0 p-1">
+                                    <i
+                                      class="fas fa-terminal text-[8px] text-slate-600"
+                                    ></i>
+                                  </div>
+                                  <pre
+                                    class="bg-[#1e1e1e] p-3 text-[10px] text-emerald-400 font-mono overflow-x-auto custom-scrollbar max-h-32 leading-tight"
+                                  ><code x-text="JSON.stringify(cs.then.body, null, 2)"></code></pre>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <div
+              x-show="!loading && filteredRoutes.length === 0"
+              x-transition:enter="transition ease-out duration-300"
+              x-transition:enter-start="opacity-0 transform scale-95"
+              x-transition:enter-end="opacity-100 transform scale-100"
+              class="flex flex-col items-center justify-center py-24 bg-white border-2 border-dashed border-slate-200 rounded-2xl shadow-sm px-6 text-center"
+            >
+              <div class="relative mb-6">
+                <div
+                  class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center border border-slate-100 shadow-inner"
+                >
+                  <i class="fas fa-route text-3xl text-slate-300"></i>
+                </div>
+                <div
+                  class="absolute -bottom-1 -right-1 w-8 h-8 bg-white rounded-full shadow-sm border border-slate-100 flex items-center justify-center"
+                >
+                  <i class="fas fa-search text-[10px] text-brand-500"></i>
+                </div>
+              </div>
+
+              <h3 class="text-lg font-bold text-slate-800 mb-2">
+                No Matching Routes Found
+              </h3>
+              <p class="text-slate-500 text-sm max-w-sm leading-relaxed mb-8">
+                We couldn't find any endpoints matching your current filters or
+                search query. <br />
+                <span class="font-medium text-slate-400"
+                  >Try refining your search terms or checking different
+                  tags.</span
+                >
+              </p>
+
+              <div class="flex gap-3">
+                <button
+                  x-show="search.length > 0"
+                  @click="search = ''"
+                  class="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-brand-600 transition-all flex items-center gap-2 shadow-lg shadow-slate-900/10 active:scale-95"
+                >
+                  <i class="fas fa-times-circle opacity-70"></i>
+                  Clear Search Filters
+                </button>
+
+                <button
+                  @click="refreshData()"
+                  class="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all flex items-center gap-2 active:scale-95"
+                >
+                  <i class="fas fa-sync-alt opacity-70"></i>
+                  Refresh System
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- TOAST -->
+    <div
+      id="toaster"
+      class="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none"
+    >
+      <template x-for="t in toasts" :key="t.id">
+        <div
+          x-show="t.show"
+          x-transition:enter="transition ease-out duration-300"
+          x-transition:enter-start="opacity-0 translate-y-4 scale-95"
+          x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+          x-transition:leave="transition ease-in duration-200"
+          x-transition:leave-start="opacity-100 scale-100"
+          x-transition:leave-end="opacity-0 scale-90"
+          class="pointer-events-auto min-w-[300px] max-w-sm bg-white border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-xl p-4 flex items-center gap-4 group"
+        >
+          <div
+            :class="{
+                'bg-emerald-50 text-emerald-600': t.type === 'success',
+                'bg-rose-50 text-rose-600': t.type === 'error',
+                'bg-amber-50 text-amber-600': t.type === 'warning'
+            }"
+            class="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+          >
+            <i
+              class="fas"
+              :class="{
+                    'fa-check-circle': t.type === 'success',
+                    'fa-exclamation-circle': t.type === 'error',
+                    'fa-triangle-exclamation': t.type === 'warning'
+                }"
+            ></i>
+          </div>
+
+          <div class="flex-1">
+            <p class="text-sm font-bold text-slate-800" x-text="t.message"></p>
+            <p
+              class="text-[11px] text-slate-400 font-medium"
+              x-text="t.time"
+            ></p>
+          </div>
+
+          <button
+            @click="removeToast(t.id)"
+            class="text-slate-300 hover:text-slate-500 transition-colors"
+          >
+            <i class="fas fa-times text-xs"></i>
+          </button>
+        </div>
+      </template>
+    </div>
+
+    <script src="/console/js/index.js"></script>
+
+    <script
+      defer
+      src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
+  </body>
+</html>

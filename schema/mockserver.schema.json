@@ -65,26 +65,26 @@
           },
           "additionalProperties": false,
           "required": ["enabled", "type", "in", "name"]
-        }, 
-        "debug": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": false
         },
-        "path": {
-          "type": "string",
-          "pattern": "^/.*",
-          "default": "/__debug"
+        "debug": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^/.*",
+              "default": "/__debug"
+            }
+          },
+          "default": {
+            "enabled": false,
+            "path": "/__debug"
+          }
         }
-      },
-      "default": {
-        "enabled": false,
-        "path": "/__debug"
-      }
-    }
       }
     },
     "groups": {
@@ -148,6 +148,91 @@
             "type": ["object", "array", "string", "number", "boolean", "null"]
           },
           "auth": { "$ref": "#/properties/server/properties/auth" },
+          "cases": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["when", "then"],
+              "additionalProperties": false,
+              "properties": {
+                "when": {
+                  "type": "string",
+                  "description": "Condition expression for this case, e.g., request.body.amount > 1000 && request.headers.Auth == 'token'."
+                },
+                "then": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "status": {
+                      "type": "integer",
+                      "description": "HTTP status code to return if the 'when' condition matches."
+                    },
+                    "body": {
+                      "type": [
+                        "object",
+                        "array",
+                        "string",
+                        "number",
+                        "boolean",
+                        "null"
+                      ],
+                      "description": "Response body to return for this case. Supports Faker templates and request placeholders."
+                    },
+                    "headers": {
+                      "type": "object",
+                      "patternProperties": {
+                        "^[A-Za-z0-9-]+$": { "type": "string" }
+                      },
+                      "additionalProperties": false,
+                      "description": "Custom HTTP headers to return for this case."
+                    },
+                    "delay_ms": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Optional delay in milliseconds before sending the response."
+                    }
+                  }
+                }
+              }
+            },
+            "description": "Array of conditional cases. Each case has a 'when' condition and a corresponding 'then' response."
+          },
+          "default": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "status": {
+                "type": "integer",
+                "description": "Default HTTP status code if no cases match."
+              },
+              "body": {
+                "type": [
+                  "object",
+                  "array",
+                  "string",
+                  "number",
+                  "boolean",
+                  "null"
+                ],
+                "description": "Default response body if no cases match. Supports Faker templates and request placeholders."
+              },
+              "headers": {
+                "type": "object",
+                "patternProperties": {
+                  "^[A-Za-z0-9-]+$": { "type": "string" }
+                },
+                "additionalProperties": false,
+                "description": "Default headers if no cases match."
+              },
+              "delay_ms": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Optional delay in milliseconds before sending the default response."
+              }
+            },
+            "description": "Default response returned when none of the cases match."
+          },
+
           "mock": {
             "type": "object",
             "required": ["file"],

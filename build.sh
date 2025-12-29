@@ -6,8 +6,8 @@ set -euo pipefail
 # ----------------------------------------
 PROJECT_NAME="mockserver"
 BIN_DIR="./npm/bin"
-CMD_DIR="./"         # Go main package location
-VERSION="0.0.11"
+CMD_DIR="."     # Go main package location
+VERSION="1.0.0"
 
 # Color codes
 RED="\033[0;31m"
@@ -65,5 +65,5 @@ case "$OS" in
 esac
 
 echo -e "${GREEN}Done! You can now run:${NC}"
-echo -e "${BLUE}./$BIN_DIR/$PROJECT_NAME start --config mockserver.json${NC}"
+echo -e "${BLUE}./$BIN_DIR/$PROJECT_NAME start --config example/mockserver.yaml${NC}"
 echo -e "${BLUE}Version: $VERSION${NC}"

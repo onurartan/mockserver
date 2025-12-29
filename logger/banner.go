@@ -11,7 +11,7 @@ import (
 )
 
 import (
-	appinfo "mockserver/internal/appinfo"
+	appinfo "mockserver/pkg/appinfo"
 )
 
 var ansi = regexp.MustCompile(`\x1b\[[0-9;]*m`)

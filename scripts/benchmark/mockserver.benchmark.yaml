@@ -1,0 +1,109 @@
+# MockServer v1.0.0 Performance Benchmark Suite
+# This configuration activates all features to stress test the server.
+
+server:
+  port: 3000
+  api_prefix: "/v1"
+  default_delay_ms: 0 
+
+
+  debug:
+    enabled: true
+    path: "/_debug"
+
+  auth:
+    enabled: true
+    type: "bearer"
+    in: "header"
+    name: "Authorization"
+    keys: ["benchmark-secret-key"]
+
+  cors:
+    enabled: true
+    allow_origins: ["*"]
+
+routes:
+  - name: "Baseline Performance"
+    tag: "Benchmark"
+    method: "GET"
+    path: "/health"
+    auth: { enabled: false }
+    mock:
+      body: { status: "ok", timestamp: "{{date}}" }
+
+  - name: "Auth Latency Test"
+    tag: "Security"
+    method: "GET"
+    path: "/secure-data"
+    mock:
+      body: { message: "Access Granted", data: "Confidential payload" }
+
+  # 3. Logic Engine Stress
+  - name: "Logic Engine Heavy"
+    tag: "Benchmark"
+    method: "POST"
+    path: "/evaluate"
+    query:
+      type:
+        type: "string"
+        required: false
+        example: "audit"
+    body_schema:
+      type: object
+      properties:
+        amount: { type: "number" }
+      required:
+        - "amount"
+    body_example:
+      amount: 1001
+    request_headers:
+      X-Priority:
+        type: string
+        required: true
+        example: "high"
+
+    cases:
+      - when: "request.headers.x-priority == 'high'"
+        then: { status: 200, body: { queue: "priority" } }
+      - when: "request.body.amount > 1000"
+        then: { status: 400, body: { error: "limit_exceeded" } }
+      - when: "request.query.type == 'audit'"
+        then: { status: 202, body: { status: "queued" } }
+    mock:
+      body: { status: "default" }
+
+  # 4. Stateful Stress: RAM (In-Memory Store) yazma/okuma hızı
+  - name: "Stateful Write"
+    tag: "Benchmark"
+    method: "POST"
+    path: "/collection"
+    stateful:
+      collection: "benchmark_data"
+      action: "create"
+      id_field: "id"
+    body_schema:
+      type: "object"
+      properties:
+        id: { type: "string" }
+      required: ["id"]
+    mock:
+      body: { id: "{{request.body.id}}", created: true }
+
+  - name: "Stateful Read"
+    tag: "Benchmark"
+    method: "GET"
+    path: "/collection/{id}"
+    stateful:
+      collection: "benchmark_data"
+      action: "get"
+      id_field: "id"
+    mock:
+      body: { id: "{{request.path.id}}", found: true, username: "exampleUser" }
+
+  - name: "Proxy Passthrough"
+    tag: "Benchmark"
+    method: "GET"
+    path: "/proxy-pass"
+    fetch:
+      url: "http://localhost:3000/v1/health"
+      timeout_ms: 2000

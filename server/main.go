@@ -2,14 +2,14 @@ package server
 
 import (
 	"fmt"
+	"io/fs"
+	"net/http"
+
+	"os"
 	"regexp"
 	"strings"
 	"time"
 
-	"net/http"
-)
-
-import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/favicon"
@@ -18,32 +18,36 @@ import (
 
 import (
 	msconfig "mockserver/config"
-	appinfo "mockserver/internal/appinfo"
 	mslogger "mockserver/logger"
+	appinfo "mockserver/pkg/appinfo"
 	msServerHandlers "mockserver/server/handlers"
+	server_utils "mockserver/server/utils"
 	msUtils "mockserver/utils"
 )
+
+var idRegex = regexp.MustCompile(`{([a-zA-Z0-9_]+)}`)
+
+
+// GlobalStateStore holds the in-memory state for stateful routes.
+// It is initialized once at startup.
+var globalStateStore = server_utils.NewStateStore()
 
 func (e *ApiError) Error() string {
 	return e.Message
 }
 
-// [IMP_FUNC]
-// StartServer initializes a Fiber HTTP server with middleware, error handling, logging, CORS,
-// authentication, and routes based on the provided configuration.
+// StartServer initializes and configures the Fiber application.
 //
-// The returned *fiber.App is ready to listen. It handles:
-//   - Structured API errors with consistent JSON responses
-//   - Panic recovery and request logging
-//   - Optional CORS and authentication per route
-//   - Swagger/OpenAPI endpoints
-//   - Automatic 404 responses for unmatched routes
+// It orchestrates the following bootstrap process:
+// 1. Configures the Fiber app engine (Error handling, 405 behaviors).
+// 2. Registers global middleware (CORS, Recovery, Logging).
+// 3. Mounts internal endpoints (Console, Swagger, Debug).
+// 4. Compiles and registers user-defined routes.
 //
-// Routes are registered using `createRouteHandler` and support GET, POST, PUT, PATCH, DELETE.
-// Path parameters in {param} style are converted to Fiber's :param format.
-func StartServer(cfg *msconfig.Config, configFilePath string) *fiber.App {
+// Returns the configured *fiber.App instance ready for listening.
+func StartServer(cfg *msconfig.Config, configFilePath string, embedFS fs.FS) *fiber.App {
 
-	// Start the request log aggregator goroutine
+	// Initialize background log aggregation
 	msServerHandlers.StartLogAggregator()
 
 	app := fiber.New(fiber.Config{
@@ -80,15 +84,49 @@ func StartServer(cfg *msconfig.Config, configFilePath string) *fiber.App {
 		},
 	})
 
-	// >_ Middleware
-	app.Use(favicon.New(favicon.Config{
-		File: "./favicon.ico",
-		URL:  "/favicon.ico",
-	}))
+	// Middleware
+	setupMiddleware(app, cfg)
+
+	// ConsoleUI
+	SetupConsoleRoutes(app, cfg, embedFS)
+
+	// OpenAPI / Swagger UI
+	app.Get("/openapi.json", func(c *fiber.Ctx) error {
+		openapi := generateOpenAPISpec(cfg)
+		return c.JSON(openapi)
+	})
+	app.Get(cfg.Server.SwaggerUIPath, swaggerUIHandler)
+
+	// Debug Routes
+	if cfg.Server.Debug != nil && cfg.Server.Debug.Enabled {
+		setupDebugRoutes(app, cfg)
+	}
+	// Register User Routes
+	registerUserRoutes(app, cfg, configFilePath)
+
+	// Fallback Handler (404)
+	app.Use(RegisterFallback())
+
+	return app
+}
+
+// setupMiddleware attaches global middleware to the Fiber app.
+func setupMiddleware(app *fiber.App, cfg *msconfig.Config) {
+	// Favicon
+	if _, err := os.Stat("./favicon.ico"); err == nil {
+		app.Use(favicon.New(favicon.Config{
+			File: "./favicon.ico",
+			URL:  "/favicon.ico",
+		}))
+	}
+
+	// Panic Recovery
 	app.Use(recover.New())
 
-	app.Use(msServerHandlers.RequestLoggerMiddleware(cfg.Server.Debug.Path))
+	// Request Logging (Custom)
+	app.Use(msServerHandlers.RequestLoggerMiddleware(cfg.Server.Debug.Path, cfg))
 
+	// CORS
 	if cfg.Server.CORS.Enabled {
 		app.Use(cors.New(cors.Config{
 			AllowOrigins:     strings.Join(cfg.Server.CORS.AllowOrigins, ","),
@@ -100,109 +138,95 @@ func StartServer(cfg *msconfig.Config, configFilePath string) *fiber.App {
 		app.Use(cors.New())
 	}
 
-	if cfg.Server.Debug != nil && cfg.Server.Debug.Enabled {
-
-		debugRequestPath := cfg.Server.Debug.Path + "/requests"
-		debugHealthPath := cfg.Server.Debug.Path + "/health"
-		mslogger.LogRoute("GET", debugRequestPath, "", 0, 0, "[DEBUG_ROUTE_REGISTERED]")
-		mslogger.LogRoute("GET", debugHealthPath, "", 0, 0, "[DEBUG_ROUTE_REGISTERED]")
-
-		app.Get(
-			debugRequestPath,
-			withRouteMeta(
-				msServerHandlers.RouteTypeInternal,
-				"debug_requests",
-				msServerHandlers.DebugRequestsHandler,
-			),
-		)
-
-		routeCount, mockCount, fetchCount := getRoutesStat(cfg)
-		app.Get(
-			debugHealthPath,
-			withRouteMeta(
-				msServerHandlers.RouteTypeInternal,
-				"debug_health",
-				msServerHandlers.HealthHandler(routeCount, mockCount, fetchCount, appinfo.Version),
-			),
-		)
-	}
-
+	// Console/Debug Exclusion Logger
 	app.Use(func(c *fiber.Ctx) error {
 		start := time.Now()
 		err := c.Next()
 		duration := time.Since(start)
+
+		// Skip logging for internal dashboard paths to keep logs clean
+		if msServerHandlers.IgnoredPaths[c.Path()] ||
+			strings.HasPrefix(c.Path(), cfg.Server.Console.Path) ||
+			strings.HasPrefix(c.Path(), cfg.Server.Debug.Path) {
+			return nil
+		}
 		mslogger.LogRoute(c.Method(), c.Path(), c.IP(), c.Response().StatusCode(), duration, "    ")
 		return err
 	})
+}
 
-	// OpenAPI / Swagger UI
-	app.Get("/openapi.json", func(c *fiber.Ctx) error {
-		openapi := generateOpenAPISpec(cfg)
-		return c.JSON(openapi)
-	})
-	app.Get(cfg.Server.SwaggerUIPath, swaggerUIHandler)
 
-	// Routes
-	prefix := cfg.Server.APIPrefix
+
+// registerUserRoutes iterates over the configuration and registers endpoints.
+// It normalizes API prefixes and path parameters (converting {id} to :id).
+func registerUserRoutes(app *fiber.App, cfg *msconfig.Config, configFilePath string) {
+	prefix := normalizePrefix(cfg.Server.APIPrefix)
+
+	maxLogRoutes := 10
+	routeLogCount := 0
+
+
+	for _, route := range cfg.Routes {
+		handler, err := createRouteHandler(route, cfg.Server, configFilePath, globalStateStore)
+		if err != nil {
+			msUtils.StopWithError(fmt.Sprintf("Failed to create route: %s", route.Name), err)
+			continue
+		}
+
+		// Convert OpenAPI style path "{id}" to Fiber style ":id"
+		fiberPath := idRegex.ReplaceAllString(route.Path, `:$1`)
+		routePath := prefix + fiberPath
+		method := strings.ToUpper(route.Method)
+
+		// Register the specific method
+		registerRoute(app, method, routePath, authMiddleware(cfg.Server.Auth, route.Auth), handler)
+
+		// Logging
+		routeLogCount++
+		if routeLogCount <= maxLogRoutes {
+			mslogger.LogRoute(method, routePath, "", 0, 0, "[ROUTE_REGISTERED]")
+		}
+	}
+
+	if len(cfg.Routes) > maxLogRoutes {
+		mslogger.LogInfo(fmt.Sprintf("+%d more routes registered...", len(cfg.Routes)-maxLogRoutes))
+	}
+}
+
+// registerRoute is a helper to dynamically register handlers based on string method names.
+func registerRoute(app *fiber.App, method, path string, mw, handler fiber.Handler) {
+	switch strings.ToUpper(method) {
+	case fiber.MethodGet:
+		app.Get(path, mw, handler)
+	case fiber.MethodPost:
+		app.Post(path, mw, handler)
+	case fiber.MethodPut:
+		app.Put(path, mw, handler)
+	case fiber.MethodPatch:
+		app.Patch(path, mw, handler)
+	case fiber.MethodDelete:
+		app.Delete(path, mw, handler)
+	}
+}
+
+// Debug route'ları ayırmak için (Opsiyonel temizlik)
+func setupDebugRoutes(app *fiber.App, cfg *msconfig.Config) {
+	debugRequestPath := cfg.Server.Debug.Path + "/requests"
+	debugHealthPath := cfg.Server.Debug.Path + "/health"
+
+	app.Get(debugRequestPath, withRouteMeta(msServerHandlers.RouteTypeInternal, "debug_requests", msServerHandlers.DebugRequestsHandler))
+
+	routeCount, mockCount, fetchCount := getRoutesStat(cfg)
+	app.Get(debugHealthPath, withRouteMeta(msServerHandlers.RouteTypeInternal, "debug_health",
+		msServerHandlers.HealthHandler(routeCount, mockCount, fetchCount, appinfo.Version)))
+}
+
+func normalizePrefix(prefix string) string {
 	if !strings.HasPrefix(prefix, "/") {
 		prefix = "/" + prefix
 	}
 	if strings.HasSuffix(prefix, "/") {
 		prefix = strings.TrimSuffix(prefix, "/")
 	}
-
-	maxLogRoutes := 10             // Maximum number of routes to be displayed in the log
-	totalRoutes := len(cfg.Routes) // Total number of routes defined in the configuration
-	routeLogCount := 0             // Displays the number of logged routes.
-
-	idRegex := regexp.MustCompile(`{([a-zA-Z0-9_]+)}`)
-
-	for _, route := range cfg.Routes {
-		handler, err := createRouteHandler(route, cfg.Server, configFilePath)
-		if err != nil {
-			msUtils.StopWithError(fmt.Sprintf("Failed to create route: %s", route.Name), err)
-			continue
-		}
-
-		fiberPath := idRegex.ReplaceAllString(route.Path, `:$1`)
-		routePath := prefix + fiberPath
-
-		switch strings.ToUpper(route.Method) {
-		case fiber.MethodGet:
-			app.Get(routePath, authMiddleware(cfg.Server.Auth, route.Auth), handler)
-		case fiber.MethodPost:
-			app.Post(routePath, authMiddleware(cfg.Server.Auth, route.Auth), handler)
-		case fiber.MethodPut:
-			app.Put(routePath, authMiddleware(cfg.Server.Auth, route.Auth), handler)
-		case fiber.MethodPatch:
-			app.Patch(routePath, authMiddleware(cfg.Server.Auth, route.Auth), handler)
-		case fiber.MethodDelete:
-			app.Delete(routePath, authMiddleware(cfg.Server.Auth, route.Auth), handler)
-		default:
-			mslogger.LogWarn(fmt.Sprintf("Unsupported HTTP method. method=%s, route=%s", route.Method, route.Name), 0, 0, 5)
-			continue
-		}
-
-		routeLogCount++
-		if routeLogCount <= maxLogRoutes {
-			mslogger.LogRoute(strings.ToUpper(route.Method), routePath, "", 0, 0, "[ROUTE_REGISTERED]")
-		}
-	}
-
-	if totalRoutes > maxLogRoutes {
-		mslogger.LogInfo(fmt.Sprintf("+%d more routes registered...", totalRoutes-maxLogRoutes))
-	}
-
-	// Return an error if the requested page does not exist
-	app.Use(func(c *fiber.Ctx) error {
-		return responseError(
-			c,
-			fiber.StatusNotFound,
-			"404_NOT_FOUND",
-			fmt.Sprintf("The route %s %s does not exist", c.Method(), c.Path()),
-			false,
-		)
-	})
-
-	return app
+	return prefix
 }

@@ -1,0 +1,48 @@
+[x-cloak] {
+  display: none !important;
+}
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.badge-GET {
+  @apply bg-blue-100 text-blue-700 border-blue-200;
+}
+.badge-POST {
+  @apply bg-emerald-100 text-emerald-700 border-emerald-200;
+}
+.badge-PUT {
+  @apply bg-amber-100 text-amber-700 border-amber-200;
+}
+.badge-DELETE {
+  @apply bg-rose-100 text-rose-700 border-rose-200;
+}
+.badge-PATCH {
+  @apply bg-purple-100 text-purple-700 border-purple-200;
+}
+
+.sw-input {
+  @apply w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all shadow-sm;
+}
+.sw-input-error {
+  @apply border-rose-300 focus:border-rose-500 focus:ring-rose-500/20 bg-rose-50/10;
+}
+.req-star {
+  @apply text-rose-500 font-bold ml-0.5;
+}
+
+/* Mevcut stillerinin altına ekle */
+code[class*="language-"],
+pre[class*="language-"] {
+  font-family: "JetBrains Mono", monospace !important;
+  font-size: 12px !important;
+  text-shadow: none !important;
+}
+.token.operator {
+  background: none;
+}

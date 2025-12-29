@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login | MockServer Console</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+      }
+
+      .shake {
+        animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+      }
+      @keyframes shake {
+        10%,
+        90% {
+          transform: translate3d(-1px, 0, 0);
+        }
+        20%,
+        80% {
+          transform: translate3d(2px, 0, 0);
+        }
+        30%,
+        50%,
+        70% {
+          transform: translate3d(-4px, 0, 0);
+        }
+        40%,
+        60% {
+          transform: translate3d(4px, 0, 0);
+        }
+      }
+
+      .loader {
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top: 2px solid #ffffff;
+        border-radius: 50%;
+        width: 16px;
+        height: 16px;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body
+    class="bg-gray-50 text-gray-900 min-h-screen flex items-center justify-center p-4"
+  >
+    <div class="w-full max-w-[400px] mx-auto">
+      <div
+        class="bg-white p-10 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100"
+      >
+        <div class="text-center mb-8">
+          <div
+            class="inline-flex items-center justify-center w-12 h-12 rounded-xl mb-6 overflow-hidden"
+          >
+            <img
+              src="/public/logo.png"
+              alt="M"
+              class=""
+              onerror="this.style.display='none'"
+            />
+          </div>
+          <h1 class="text-2xl font-semibold tracking-tight text-gray-900">
+            Sign in
+          </h1>
+          <p class="text-gray-500 text-sm mt-2">
+            Enter your credentials to access the console.
+          </p>
+        </div>
+
+        <form id="loginForm" class="space-y-5">
+          <div class="space-y-1.5">
+            <label class="block text-sm font-medium text-gray-700"
+              >Username</label
+            >
+            <input
+              type="text"
+              id="username"
+              name="username"
+              required
+              class="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:bg-white focus:border-gray-900 focus:ring-1 focus:ring-gray-900 transition-all duration-200 text-sm"
+              placeholder="admin"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="block text-sm font-medium text-gray-700"
+              >Password</label
+            >
+            <input
+              type="password"
+              id="password"
+              name="password"
+              required
+              class="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:bg-white focus:border-gray-900 focus:ring-1 focus:ring-gray-900 transition-all duration-200 text-sm"
+              placeholder="••••••••"
+            />
+          </div>
+
+          <div
+            id="error-box"
+            class="hidden opacity-0 transform translate-y-1 transition-all duration-300 bg-red-50 text-red-600 text-xs p-3 rounded-lg flex items-center gap-2 border border-red-100"
+          >
+            <svg
+              class="w-4 h-4 flex-shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              ></path>
+            </svg>
+            <span id="error-text">Invalid credentials</span>
+          </div>
+
+          <button
+            type="submit"
+            id="submitBtn"
+            class="w-full bg-gray-900 hover:bg-black text-white font-medium py-3.5 rounded-lg transform active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-gray-200"
+          >
+            <span id="btnText">Get Started</span>
+            <div id="btnLoader" class="loader hidden"></div>
+          </button>
+        </form>
+      </div>
+
+      <p class="text-center text-gray-400 text-xs mt-8 font-medium">
+        MockServer Console v1.0
+      </p>
+    </div>
+
+    <script>
+      const form = document.getElementById("loginForm");
+      const errorBox = document.getElementById("error-box");
+      const submitBtn = document.getElementById("submitBtn");
+      const btnText = document.getElementById("btnText");
+      const btnLoader = document.getElementById("btnLoader");
+      const inputs = document.querySelectorAll("input");
+      const card = document.querySelector(".bg-white");
+
+      inputs.forEach((input) => {
+        input.addEventListener("focus", () => {
+          errorBox.classList.add("hidden", "opacity-0");
+          input.classList.remove("border-red-500", "bg-red-50");
+        });
+      });
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        // UI Loading State
+        submitBtn.disabled = true;
+        btnText.textContent = "Verifying...";
+        btnLoader.classList.remove("hidden");
+        errorBox.classList.add("hidden", "opacity-0");
+
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        try {
+          const response = await fetch("/console/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+
+          const result = await response.json();
+
+          if (result.success) {
+            // Success State
+            btnText.textContent = "Redirecting...";
+            setTimeout(() => {
+              window.location.href = result.redirect;
+            }, 500);
+          } else {
+            throw new Error(result.error || "Login failed");
+          }
+        } catch (err) {
+          // Error State
+          errorBox.classList.remove("hidden");
+          // Trigger reflow
+          void errorBox.offsetWidth;
+          errorBox.classList.remove("opacity-0", "translate-y-1");
+
+          document.getElementById("error-text").textContent = err.message;
+
+          inputs.forEach((input) =>
+            input.classList.add("border-red-500", "bg-red-50")
+          );
+
+          card.classList.add("shake");
+          setTimeout(() => card.classList.remove("shake"), 500);
+        } finally {
+          submitBtn.disabled = false;
+          if (btnText.textContent !== "Redirecting...") {
+            btnText.textContent = "Get Started";
+            btnLoader.classList.add("hidden");
+          }
+        }
+      });
+    </script>
+  </body>
+</html>

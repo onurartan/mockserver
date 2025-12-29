@@ -12,17 +12,21 @@ import (
 )
 
 // Returns the formatted server URL with cyan color for console output.
-func GetServerHost(port string) string {
+func GetServerHost(port string, path string) string {
 	serverUrlColor := color.New(color.FgCyan).SprintFunc()
 	_host := "localhost"
 	serverUrl := fmt.Sprintf("http://%s%s", _host, port)
+
+	if  path != "" {
+		serverUrl = fmt.Sprintf("%s%s", serverUrl, path)
+	}
 
 	return serverUrlColor(serverUrl)
 }
 
 // Prints a standardized success message when the server starts.
 func LogServerStart(port string) {
-	LogSuccess(fmt.Sprintf("Server started on %s", GetServerHost(port)), 1)
+	LogSuccess(fmt.Sprintf("Server started on %s", GetServerHost(port, "")), 1)
 }
 
 // LogRoute logs detailed information about a single HTTP request.
@@ -127,9 +131,6 @@ func RequestLogger() fiber.Handler {
 // - LogError   → prints error messages (red).
 // - LogWarn    → prints warning messages (yellow).
 // - LogInfo    → prints informational messages (blue).
-//
-// Each function accepts the log message and optional empty line padding (addEmptyLines).
-// Designed to keep console output clean, color-coded, and developer-friendly.
 
 func LogSuccess(msg string, addEmptyLines ...int) {
 	logWithType("OK", successStyle, msg, addEmptyLines...)

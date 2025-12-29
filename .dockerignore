@@ -1,0 +1,38 @@
+.qodo
+schema/mockserver.schema_old.json
+.docs/gitbash.md
+.docs/
+scripts/
+tests/
+build.sh
+build_with_upx.sh
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build / Binaries
+dist/
+build/
+bin/
+releases/
+npm/
+
+*.exe
+*-linux
+*-linux-*
+*-macos
+*-macos-*
+*.vers
+
+# Temp / Backup
+*.bak
+*.tmp
+*.swp
+

@@ -7,7 +7,7 @@ import (
 )
 
 import (
-	appinfo "mockserver/internal/appinfo"
+	appinfo "mockserver/pkg/appinfo"
 )
 
 type HealthResponse struct {

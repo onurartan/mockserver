@@ -1,6 +1,7 @@
 .qodo
 schema/mockserver.schema_old.json
 .docs/gitbash.md
+example/mockserver-dev.yaml
 
 # Node
 node_modules/
@@ -15,21 +16,19 @@ Thumbs.db
 # Build / Binaries
 dist/
 build/
+bin/
 
-*.exe
-*-linux
-*-macos
-*-macos-*
-
+./*.exe
+./*-linux
+./*-linux-*
+./*-macos
+./*-macos-*
+./*.vers
 
 !npm/bin/.gitkeep
-# npm/bin/mockserver
-# npm/bin/*.exe
-# npm/bin/*-linux
-# npm/bin/*-macos
-# npm/bin/*-macos-*
 
 # Temp / Backup
 *.bak
 *.tmp
 *.swp
+

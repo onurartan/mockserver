@@ -1,0 +1,6 @@
+{
+  "status": "deleted",
+  "message": "User has been successfully deleted",
+  "deletedAt": "{{date}}",
+  "userId": "{{request.path.id}}"
+}

@@ -1,0 +1,451 @@
+server:
+  port: 5000
+  api_prefix: "/v1"
+  console:
+    enabled: true
+    path: "/console"
+    auth:
+      enabled: true
+      username: "admin"
+      password: "123"
+  default_headers:
+    Content-Type: "application/json"
+  debug:
+    enabled: true
+    path: "/__debug"
+  default_delay_ms: 50
+  cors:
+    enabled: true
+    allow_origins: ["*"]
+    allow_methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+    allow_headers: ["*"]
+    allow_credentials: false
+  auth:
+    enabled: true
+    type: "apiKey"
+    name: "X-API-Key"
+    in: "header"
+    keys:
+      - "secret"
+      - "team-secret"
+
+routes:
+  # ==========================
+  # USERS ROUTES - BASIC
+  # ==========================
+  - name: "Get All Users"
+    tag: "Users"
+    method: "GET"
+    path: "/users"
+    auth:
+      enabled: true
+      type: "apiKey"
+      name: "apiKey"
+      in: "header"
+      keys:
+        - "secret"
+    query:
+      limit:
+        type: "integer"
+        required: false
+      sort:
+        type: "string"
+        required: false
+    fetch:
+      url: "https://jsonplaceholder.typicode.com/users"
+      headers:
+        Accept: "application/json"
+
+  - name: "Get User By ID"
+    tag: "Users"
+    method: "GET"
+    path: "/users/{id}"
+    path_params:
+      id:
+        type: "integer"
+        required: true
+    fetch:
+      url: "https://jsonplaceholder.typicode.com/users/{id}"
+
+  - name: "Create User"
+    tag: "Users"
+    method: "POST"
+    path: "/users"
+    body_schema:
+      type: object
+      properties:
+        name: { type: "string" }
+        username: { type: "string" }
+        email: { type: "string" }
+      required:
+        - "name"
+        - "username"
+        - "email"
+    body_example:
+      name: "John Doe"
+      username: "johnd"
+      email: "john@example.com"
+    fetch:
+      url: "https://jsonplaceholder.typicode.com/users"
+      method: "POST"
+      headers:
+        Content-Type: "application/json"
+
+  # ==========================
+  # STATEFUL USERS (FROM ECOMMERCE)
+  # ==========================
+  - name: "Create User (Stateful)"
+    tag: "Users"
+    method: "POST"
+    path: "/users/stateful"
+    stateful:
+      collection: "users"
+      action: "create"
+      id_field: "id"
+    body_schema:
+      type: object
+      properties:
+        id: { type: "number" }
+        name: { type: "string" }
+        email: { type: "string" }
+        role: { type: "string" }
+      required: ["id", "name", "email"]
+    mock:
+      status: 201
+      body: "{{state.created}}"
+    cases:
+      # Type check örneği: ecommerce.yaml'dan alındı
+      - when: "type(request.body.id) != 'number'"
+        then:
+          status: 400
+          body: { error: "userId must be a number" }
+
+  - name: "Get User (Stateful)"
+    tag: "Users"
+    method: "GET"
+    path: "/users/stateful/{id}"
+    path_params:
+      id:
+        type: string
+        required: true
+    stateful:
+      collection: "users"
+      action: "get"
+      id_field: "id"
+    mock:
+      status: 200
+      body: "{{state.item}}"
+
+  - name: "Update User (Stateful)"
+    tag: "Users"
+    method: "PUT"
+    path: "/users/stateful/{id}"
+    path_params:
+      id:
+        type: string
+        required: true
+    stateful:
+      collection: "users"
+      action: "update"
+      id_field: "id"
+    body_schema:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string }
+        role: { type: string }
+    mock:
+      status: 200
+      body: "{{state.updated}}"
+
+  - name: "Delete User (Stateful)"
+    tag: "Users"
+    method: "DELETE"
+    path: "/users/stateful/{id}"
+    path_params:
+      id:
+        type: string
+        required: true
+    stateful:
+      collection: "users"
+      action: "delete"
+      id_field: "id"
+    mock:
+      status: 200
+      body:
+        success: true
+        userId: "{{request.path.id}}"
+        message: "user successfully deleted"
+
+  - name: "User(Mock Not File only Body)"
+    method: "GET"
+    path: "/user/{id}"
+    path_params:
+      id:
+        type: string
+        required: true
+    mock:
+      status: 200
+      body:
+        success: true
+        userId: "{{request.path.id}}"
+        message: "user successfully deleted"
+
+  # ==========================
+  # PAYMENT ROUTES (STATELESS)
+  # ==========================
+  - name: "Make Payment"
+    tag: "Payments"
+    path: "/payment"
+    method: "POST"
+    body_schema:
+      type: object
+      properties:
+        amount:
+          type: number
+      required: ["amount"]
+    body_example:
+      amount: 1001
+    request_headers:
+      Auth:
+        type: string
+        required: true
+        description: "Authorization token for API"
+        example: "valid-token"
+    # CASES: farklı koşullara göre response üretir
+    cases:
+      - when: "request.body.amount > 1000"
+        then:
+          status: 403
+          body:
+            error: "Limit exceeded"
+      - when: "request.headers.Auth == 'valid-token'"
+        then:
+          status: 200
+          body:
+            status: "success"
+    default:
+      status: 401
+      body:
+        error: "Unauthorized"
+
+  # (STATEFUL)
+  - name: "Process Payment"
+    tag: "Payments"
+    path: "/payments"
+    method: POST
+    body_schema:
+      type: object
+      properties:
+        orderId: { type: string }
+        amount: { type: number }
+      required: ["orderId", "amount"]
+    stateful:
+      collection: "payments"
+      action: "create"
+      id_field: "orderId" # Eğer bir siparişe SADECE 1 ödeme yapılabilsin istiyorsan bu kalsın
+    mock:
+      status: 201
+      body:
+        paymentId: "{{uuid}}"
+        status: "processed"
+        orderId: "{{request.body.orderId}}"
+        processedAt: "{{dateFuture days=0}}"
+    cases:
+      - when: "request.body.amount > 1000"
+        then:
+          status: 403
+          body: { error: "Amount exceeds limit (1000)", code: "LIMIT_EXCEEDED" }
+
+      - when: "request.body.amount <= 1000"
+        then:
+          status: 201
+          # [FIX]: create action başarılı olduğunda kaydedilen veriyi dönmek en doğrusudur
+          body:
+            paymentId: "{{uuid}}"
+            status: "success"
+            orderId: "{{request.body.orderId}}"
+            amount: "{{request.body.amount}}"
+            processedAt: "{{dateNow}}"
+
+  # ==========================
+  # ORDERS ROUTES (STATELESS + CASES) and Normal
+  # ==========================
+  - name: "Search Orders"
+    tag: "Orders"
+    method: "GET"
+    path: "/orders/search"
+    query:
+      status:
+        type: string
+        required: false
+      limit:
+        type: integer
+        required: false
+    fetch:
+      url: "https://jsonplaceholder.typicode.com/posts"
+      method: GET
+      query_params:
+        userId: "1"
+
+  - name: "Process Order"
+    tag: "Orders"
+    path: "/orders"
+    method: "POST"
+    body_schema:
+      type: object
+      properties:
+        orderId: { type: string }
+        amount: { type: number }
+        currency: { type: string }
+        priority: { type: string, enum: ["low", "medium", "high"] }
+      required: ["orderId", "amount", "currency"]
+    body_example:
+      orderId: "ORD123456"
+      amount: 2500
+      currency: "USD"
+      priority: "high"
+    request_headers:
+      Auth:
+        type: string
+        required: true
+        description: "Authorization token"
+        example: "valid-token"
+    # CASES: Koşula bağlı response
+    cases:
+      - when: "request.body.amount > 5000"
+        then:
+          status: 403
+          body:
+            error: "Amount exceeds allowed limit"
+          headers:
+            Retry-After: "3600"
+          delay_ms: 100
+      - when: "request.body.currency != 'USD'"
+        then:
+          status: 400
+          body:
+            error: "Unsupported currency"
+      - when: "request.headers.X-API-Key != 'secret'"
+        then:
+          status: 401
+          body:
+            error: "Unauthorized"
+          delay_ms: 50
+      - when: "request.body.priority == 'high' AND request.body.amount <= 5000"
+        then:
+          status: 200
+          body:
+            orderId: "{{request.body.orderId}}"
+            status: "processed"
+            estimatedDelivery: "{{dateFuture days=1}}"
+          headers:
+            X-Priority: "high"
+          delay_ms: 200
+      - when: "request.body.priority == 'medium'"
+        then:
+          status: 200
+          body:
+            orderId: "{{request.body.orderId}}"
+            status: "queued"
+            estimatedDelivery: "{{dateFuture days=3}}"
+          headers:
+            X-Priority: "medium"
+      - when: "request.body.priority == 'low'"
+        then:
+          status: 200
+          body:
+            orderId: "{{request.body.orderId}}"
+            status: "queued"
+            estimatedDelivery: "{{dateFuture days=5}}"
+          headers:
+            X-Priority: "low"
+    default:
+      status: 400
+      body:
+        error: "Invalid order request"
+
+  # ==========================
+  # TODOS ROUTES
+  # ==========================
+  - name: "List Todos (Mock)"
+    tag: "Todos"
+    method: "GET"
+    path: "/todos"
+    query:
+      completed:
+        type: boolean
+        required: false
+    mock:
+      file: "mocks/todos.json"
+      status: 200
+      headers:
+        X-Source: "MockFile"
+      delay_ms: 50
+
+  - name: "Get Todo By title (Mock)"
+    tag: "Todos"
+    method: "GET"
+    path: "/todos/{title}"
+    path_params:
+      title:
+        type: string
+        required: true
+    mock:
+      file: "mocks/todos.json"
+
+  # ==========================
+  # POSTS ROUTES
+  # ==========================
+  - name: "Search Posts"
+    tag: "Posts"
+    method: "GET"
+    path: "/posts/search"
+    query:
+      q:
+        type: string
+        required: true
+      limit:
+        type: integer
+        required: false
+    fetch:
+      url: "https://jsonplaceholder.typicode.com/posts"
+      headers:
+        Accept: "application/json"
+      query_params:
+        userId: "1"
+
+  # ==========================
+  # AVATAR ROUTES
+  # ==========================
+  - name: "Avatar Image Proxy"
+    tag: "Avatar"
+    method: "GET"
+    path: "/avatar/{username}"
+    path_params:
+      username:
+        type: string
+        required: true
+    query:
+      initials:
+        type: string
+        required: false
+        example: "auto"
+      aType:
+        type: string
+        required: true
+        example: "color"
+
+    fetch:
+      url: "https://avatar.example.com/avatar/{username}"
+      headers:
+        Accept: "image/png"
+
+  - name: "PDF Proxy"
+    tag: "Files"
+    method: "GET"
+    path: "/pdf"
+    fetch:
+      url: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+      headers:
+        Accept: "application/pdf"
