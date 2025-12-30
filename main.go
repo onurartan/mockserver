@@ -23,6 +23,9 @@ import (
 //go:embed www
 var embedDir embed.FS
 
+//go:embed favicon.ico
+var faviconFS embed.FS
+
 const (
 	// Debounce delay for config reload
 	debounceDelay = 500 * time.Millisecond

@@ -18,7 +18,7 @@ func mustLoadAndStart(configPath string) *Runtime {
 		fatalExit(fmt.Sprintf("Failed to load config: %v", err))
 	}
 
-	app := msServer.StartServer(cfg, configPath, embedDir)
+	app := msServer.StartServer(cfg, configPath, embedDir, faviconFS)
 
 	return &Runtime{
 		App: app,
@@ -51,7 +51,7 @@ func reloadServer(configFile string, rt *Runtime) {
 		_ = rt.App.Shutdown()
 	}
 
-	newApp := msServer.StartServer(cfg, configFile, embedDir)
+	newApp := msServer.StartServer(cfg, configFile, embedDir, faviconFS)
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 
 	go listenApp(newApp, addr)

@@ -20,6 +20,9 @@ import (
 //go:embed server_test.go
 var testEmbedFS embed.FS
 
+//go:embed server_test.go
+var testFaviconFS embed.FS
+
 
 func makeRequest(method, url string, body interface{}, headers map[string]string) *http.Request {
 	var bodyReader io.Reader
@@ -68,7 +71,7 @@ func TestIntegration_SimpleMock(t *testing.T) {
 		},
 	}
 
-	app := server.StartServer(cfg, "", testEmbedFS)
+	app := server.StartServer(cfg, "", testEmbedFS, testFaviconFS)
 
 	// Send a request
 	req := makeRequest("GET", "/v1/hello", nil, nil)
@@ -109,7 +112,7 @@ func TestIntegration_LogicCases(t *testing.T) {
 		},
 	}
 
-	app := server.StartServer(cfg, "", testEmbedFS)
+	app := server.StartServer(cfg, "", testEmbedFS, testFaviconFS)
 
 	// Senaryo A: VIP
 	reqVIP := makeRequest("POST", "/api/price", map[string]string{"type": "vip"}, nil)
@@ -173,7 +176,7 @@ func TestIntegration_StatefulFlow(t *testing.T) {
 		},
 	}
 
-	app := server.StartServer(cfg, "", testEmbedFS)
+	app := server.StartServer(cfg, "", testEmbedFS, testFaviconFS)
 
 	// Step 1: Create User
 	newUser := map[string]interface{}{"id": 123, "name": "CTO"}
@@ -213,7 +216,7 @@ func TestIntegration_Auth(t *testing.T) {
 		},
 	}
 
-	app := server.StartServer(cfg, "", testEmbedFS)
+	app := server.StartServer(cfg, "", testEmbedFS, testFaviconFS)
 
 	// Scenario 1: Keyless (Fail)
 	reqFail := makeRequest("GET", "/secure/data", nil, nil)
@@ -241,7 +244,7 @@ func TestIntegration_Fetch(t *testing.T) {
 		},
 	}
 
-	app := server.StartServer(cfg, "", testEmbedFS)
+	app := server.StartServer(cfg, "", testEmbedFS, testFaviconFS)
 
 	req := makeRequest("GET", "/proxy/google", nil, nil)
 	resp, _ := app.Test(req, 5000)

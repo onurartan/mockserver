@@ -23,7 +23,7 @@ You can execute the builder directly via `go run` or through the provided **Make
 | `-current` | Builds the binary only for the current operating system and architecture. |
 | `-all` | Triggers cross-platform builds for Linux, macOS, and Windows. |
 | `-npm` | Targets the build specifically for NPM distribution, outputting to `./npm/bin`. |
-| `-out` | Specifies the output directory (default is typically `releases/latest`). |
+| `-out` | Specifies the output directory (default is typically `releases/latest/download`). |
 
 ### Makefile Shortcuts
 

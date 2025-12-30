@@ -27,7 +27,6 @@ import (
 
 var idRegex = regexp.MustCompile(`{([a-zA-Z0-9_]+)}`)
 
-
 // GlobalStateStore holds the in-memory state for stateful routes.
 // It is initialized once at startup.
 var globalStateStore = server_utils.NewStateStore()
@@ -45,7 +44,7 @@ func (e *ApiError) Error() string {
 // 4. Compiles and registers user-defined routes.
 //
 // Returns the configured *fiber.App instance ready for listening.
-func StartServer(cfg *msconfig.Config, configFilePath string, embedFS fs.FS) *fiber.App {
+func StartServer(cfg *msconfig.Config, configFilePath string, embedFS fs.FS, faviconFS fs.FS) *fiber.App {
 
 	// Initialize background log aggregation
 	msServerHandlers.StartLogAggregator()
@@ -85,7 +84,7 @@ func StartServer(cfg *msconfig.Config, configFilePath string, embedFS fs.FS) *fi
 	})
 
 	// Middleware
-	setupMiddleware(app, cfg)
+	setupMiddleware(app, cfg, faviconFS)
 
 	// ConsoleUI
 	SetupConsoleRoutes(app, cfg, embedFS)
@@ -111,12 +110,13 @@ func StartServer(cfg *msconfig.Config, configFilePath string, embedFS fs.FS) *fi
 }
 
 // setupMiddleware attaches global middleware to the Fiber app.
-func setupMiddleware(app *fiber.App, cfg *msconfig.Config) {
+func setupMiddleware(app *fiber.App, cfg *msconfig.Config, faviconFS fs.FS) {
 	// Favicon
 	if _, err := os.Stat("./favicon.ico"); err == nil {
 		app.Use(favicon.New(favicon.Config{
-			File: "./favicon.ico",
-			URL:  "/favicon.ico",
+			FileSystem: http.FS(faviconFS),
+			File:       "./favicon.ico",
+			URL:        "/favicon.ico",
 		}))
 	}
 
@@ -155,8 +155,6 @@ func setupMiddleware(app *fiber.App, cfg *msconfig.Config) {
 	})
 }
 
-
-
 // registerUserRoutes iterates over the configuration and registers endpoints.
 // It normalizes API prefixes and path parameters (converting {id} to :id).
 func registerUserRoutes(app *fiber.App, cfg *msconfig.Config, configFilePath string) {
@@ -164,7 +162,6 @@ func registerUserRoutes(app *fiber.App, cfg *msconfig.Config, configFilePath str
 
 	maxLogRoutes := 10
 	routeLogCount := 0
-
 
 	for _, route := range cfg.Routes {
 		handler, err := createRouteHandler(route, cfg.Server, configFilePath, globalStateStore)

@@ -1,5 +1,0 @@
-git commit -m "v1.0.0: Ready for the world"
-
-go test -v ./server/utils
-
-./mockserver/npm/bin/mockserver start --config mockserver/example/mockserver.yaml

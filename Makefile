@@ -14,7 +14,7 @@ build: ## Standard build (outputs to ./bin)
 	@go run scripts/builder.go -current
 
 build-release: ## Build releases 
-	@go run scripts/builder.go -all -out="releases/latest"
+	@go run scripts/builder.go -all -out="releases/latest/download"
     
 build-all: ## All builds (outputs to ./bin)
 	@go run scripts/builder.go -all -npm
