@@ -25,7 +25,7 @@
 
 ## Overview
 
-**MockServer** is a high-performance, production-ready mock API server built with Go. It enables developers to create sophisticated API simulations using declarative JSON/YAML configurations, supporting complex routing, authentication, state management, and real-time request proxying.
+**MockServer** is a high-performance mock API server built with Go. It enables developers to create sophisticated API simulations using declarative JSON/YAML configurations, supporting complex routing, authentication, state management, and real-time request proxying.
 
 ### Key Capabilities
 

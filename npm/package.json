@@ -1,6 +1,6 @@
 {
   "name": "mockserverx",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "High-performance, easy-to-use mock API server written in Go. Supports live config reload, cross-platform binaries, and simple CLI interface.",
   "bin": {
     "mockserver": "./bin/mockserver"
