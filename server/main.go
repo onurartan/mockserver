@@ -5,7 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 
-	"os"
+	// "os"
 	"regexp"
 	"strings"
 	"time"
@@ -112,13 +112,13 @@ func StartServer(cfg *msconfig.Config, configFilePath string, embedFS fs.FS, fav
 // setupMiddleware attaches global middleware to the Fiber app.
 func setupMiddleware(app *fiber.App, cfg *msconfig.Config, faviconFS fs.FS) {
 	// Favicon
-	if _, err := os.Stat("./favicon.ico"); err == nil {
+	// if _, err := os.Stat("./favicon.ico"); err == nil {
 		app.Use(favicon.New(favicon.Config{
 			FileSystem: http.FS(faviconFS),
-			File:       "./favicon.ico",
+			File:       "favicon.ico",
 			URL:        "/favicon.ico",
 		}))
-	}
+	// }
 
 	// Panic Recovery
 	app.Use(recover.New())
