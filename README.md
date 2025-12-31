@@ -30,7 +30,7 @@
 ### Key Capabilities
 
 - **Declarative Configuration**: JSON/YAML-based route definitions with JSON Schema validation
-> **📘 Detailed Schema Guide**: For a deep dive into all available configuration options, validation rules, and JSON Schema definitions, please refer to the [MockServer Schema Documentation](https://www.github.com/onurartan/mockserver.docs/mockserver-schema.md).
+> **📘 Detailed Schema Guide**: For a deep dive into all available configuration options, validation rules, and JSON Schema definitions, please refer to the [MockServer Schema Documentation](https://github.com/onurartan/mockserver/blob/main/.docs/mockserver-schema.md).
 - **Hybrid Routing**: Mock static responses or proxy to real APIs with intelligent request transformation
 - **Advanced Authentication**: Multi-method auth (API Key, Bearer Token) with route-level overrides
 - **State Management**: In-memory state engine for stateful API simulations
