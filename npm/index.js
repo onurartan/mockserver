@@ -3,7 +3,6 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { execSync } = require('child_process');
 
 const binDir = path.join(__dirname, 'bin');
 const platform = os.platform();
@@ -14,9 +13,13 @@ let srcFile;
 if (platform === 'win32') {
   srcFile = 'mockserver.exe';
 } else if (platform === 'darwin') {
-  srcFile = arch === 'arm64' ? 'mockserver-macos-arm64' : 'mockserver-macos';
+  srcFile = arch === 'arm64'
+    ? 'mockserver-macos-arm64'
+    : 'mockserver-macos';
 } else if (platform === 'linux') {
-  srcFile = 'mockserver-linux';
+  srcFile = arch === 'arm64'
+    ? 'mockserver-linux-arm64'
+    : 'mockserver-linux';
 } else {
   console.error(`Unsupported platform/arch: ${platform}/${arch}`);
   process.exit(1);
